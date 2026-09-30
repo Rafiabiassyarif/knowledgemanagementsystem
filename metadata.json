@@ -1,0 +1,6 @@
+{
+  "name": "KMS - Enterprise Knowledge Management System",
+  "description": "Platform pengelolaan knowledge dan dokumen organisasi multi-tenant dengan isolasi enterprise dan kesiapan RAG/AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

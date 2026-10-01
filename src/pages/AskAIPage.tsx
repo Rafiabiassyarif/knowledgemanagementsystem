@@ -17,7 +17,8 @@ import {
   Download,
   ExternalLink,
   Eye,
-  ArrowRight
+  ArrowRight,
+  Paperclip
 } from 'lucide-react';
 
 export const AskAIPage: React.FC = () => {
@@ -416,6 +417,53 @@ export const AskAIPage: React.FC = () => {
                   </div>
                 ) : (
                   renderMessageContent(msg.text)
+                )}
+
+                {/* Lampiran Multi-Dokumen: foto dirender langsung, dokumen/file sebagai kartu */}
+                {msg.sender === 'assistant' && msg.attachments && msg.attachments.length > 0 && (
+                  <div className="mt-3 space-y-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                      <Paperclip className="w-3 h-3" />
+                      <span>Lampiran CDN ({msg.attachments.length})</span>
+                    </div>
+                    {msg.attachments.map(att => att.type === 'image' ? (
+                      <a
+                        key={att.id}
+                        href={att.downloadUrl || att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block group/att"
+                        title={`Buka ${att.title} di tab baru`}
+                      >
+                        <img
+                          src={att.url}
+                          alt={att.title}
+                          loading="lazy"
+                          className="max-w-full sm:max-w-sm max-h-72 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm group-hover/att:shadow-md group-hover/att:scale-[1.01] transition-all cursor-pointer bg-slate-50 dark:bg-slate-900 object-cover"
+                        />
+                        <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">{att.title} · klik untuk perbesar</span>
+                      </a>
+                    ) : (
+                      <a
+                        key={att.id}
+                        href={att.downloadUrl || att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/30 transition-all group/att"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 font-bold text-[9px]">
+                          {(att.fileType || 'FILE').slice(0, 4)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{att.title}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {att.fileType} {att.sizeKb ? `· ${att.sizeKb} KB` : ''} · Kroombox CDN
+                          </div>
+                        </div>
+                        <Download className="w-4 h-4 text-slate-400 dark:text-slate-500 group-hover/att:text-blue-600 dark:group-hover/att:text-blue-400 shrink-0 transition-colors" />
+                      </a>
+                    ))}
+                  </div>
                 )}
 
                 {/* Real RAG Source Documents & Citations */}

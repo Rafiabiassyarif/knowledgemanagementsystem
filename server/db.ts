@@ -117,7 +117,6 @@ async function createTables() {
       file_size_kb INT DEFAULT 0,
       file_url TEXT NULL,
       file_name VARCHAR(255) NULL,
-      file_data LONGBLOB NULL,
       year INT DEFAULT 2024,
       department VARCHAR(255) NULL,
       summary TEXT NULL,
@@ -138,12 +137,19 @@ async function createTables() {
     [DB_NAME]
   );
   const existingDocCols = new Set((docCols as any[]).map(c => c.COLUMN_NAME));
-  if (!existingDocCols.has('file_data')) {
-    await p.query('ALTER TABLE documents ADD COLUMN file_data LONGBLOB NULL AFTER file_url');
-    console.log('[DB] Kolom file_data (LONGBLOB) ditambahkan ke tabel documents.');
+  // Cleanup: buang kolom biner warisan file_data — semua berkas fisik WAJIB di Kroombox CDN,
+  // MySQL hanya menyimpan metadata. Kolom ini dijamin kosong sebelum dihapus.
+  if (existingDocCols.has('file_data')) {
+    const [binRows] = await p.query<any[]>('SELECT COUNT(*) AS cnt FROM documents WHERE file_data IS NOT NULL');
+    if (binRows[0].cnt > 0) {
+      console.warn(`[DB] Ditemukan ${binRows[0].cnt} dokumen dengan binary di DB — kolom file_data TIDAK dihapus. Migrasikan manual dulu.`);
+    } else {
+      await p.query('ALTER TABLE documents DROP COLUMN file_data');
+      console.log('[DB] Kolom file_data (LONGBLOB) dihapus — berkas fisik khusus di CDN.');
+    }
   }
   if (!existingDocCols.has('file_name')) {
-    await p.query('ALTER TABLE documents ADD COLUMN file_name VARCHAR(255) NULL AFTER file_data');
+    await p.query('ALTER TABLE documents ADD COLUMN file_name VARCHAR(255) NULL AFTER file_url');
     console.log('[DB] Kolom file_name ditambahkan ke tabel documents.');
   }
   if (!existingDocCols.has('repository_type')) {

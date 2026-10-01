@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const RAG_BASE_URL = process.env.RAG_BASE_URL || 'https://ragjev.kii.lat';
+const RAG_BASE_URL = process.env.RAG_BASE_URL || 'https://rag.aiones.app';
 // API key is loaded from .env only — never hardcode credentials in source code.
 const RAG_API_KEY = process.env.RAG_API_KEY || '';
 
@@ -21,6 +21,8 @@ export interface IndexDocumentParams {
   contentBase64?: string | null;
   text?: string | null;
   metadata?: Record<string, any>;
+  /** API key khusus project (opsional) — dipakai bila tersedia, fallback ke master key. */
+  apiKey?: string | null;
 }
 
 export interface QueryRagParams {
@@ -115,12 +117,14 @@ export async function indexDocumentToRag(params: IndexDocumentParams): Promise<{
       payload.text = textContent;
     }
 
+    const bearerKey = params.apiKey || RAG_API_KEY;
+
     console.log(`[RAG SERVICE] Mengindeks dokumen "${docName}" (ID: ${params.documentId}) ke KB: ${kbId}`);
 
     const res = await fetch(`${RAG_BASE_URL}/api/v1/knowledge/index`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${RAG_API_KEY}`,
+        'Authorization': `Bearer ${bearerKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)

@@ -13,6 +13,7 @@ import joinRequestRoutes from './routes/joinRequests';
 import statsRoutes from './routes/stats';
 import adminRoutes from './routes/admin';
 import cdnRoutes from './routes/cdn';
+import chatRoutes from './routes/chat';
 
 import { swaggerRouter } from './docs/swagger';
 
@@ -57,6 +58,8 @@ app.use('/api/join-requests', requireAuth, joinRequestRoutes);
 app.use('/api/stats', requireAuth, statsRoutes);
 app.use('/api/admin', requireAuth, adminRoutes);
 app.use('/api/cdn', requireAuth, cdnRoutes);
+// Chat RAG AI (query knowledge + render lampiran multi-dokumen CDN)
+app.use('/api/chat', requireAuth, chatRoutes);
 
 // Global Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

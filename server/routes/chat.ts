@@ -48,7 +48,7 @@ function formatOutOfContextResponse(query: string, orgName: string, docCount: nu
 // 1. Check RAG Service Status
 router.get('/status', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const RAG_BASE_URL = process.env.RAG_BASE_URL || 'https://ragjev.kii.lat';
+    const RAG_BASE_URL = process.env.RAG_BASE_URL || 'https://rag.aiones.app';
     const checkRes = await fetch(`${RAG_BASE_URL}/api/v1/ready`);
     const data = await checkRes.json();
     res.json({
@@ -65,6 +65,49 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
     });
   }
 });
+
+/**
+ * Bangun daftar attachment multi-dokumen (foto/file/dokumen) dengan signed CDN URL
+ * untuk dirender langsung di bubble chat. Foto -> type 'image' (dirender <img>),
+ * dokumen/file -> type 'document'/'file' (kartu unduhan).
+ */
+async function buildAttachments(docs: any[]): Promise<any[]> {
+  const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+  const IMAGE_MIMES = ['image/'];
+
+  return Promise.all(docs.map(async (d: any) => {
+    let url: string | null = null;
+    if (d.cdn_file_id) {
+      try {
+        url = await createCDNSignedUrl(d.cdn_file_id, 86400);
+      } catch (signErr) {
+        console.warn(`[CHAT ATTACH SIGN WARN ${d.cdn_file_id}]`, signErr);
+      }
+    }
+    if (!url) {
+      if (d.file_url && (d.file_url.startsWith('http://') || d.file_url.startsWith('https://'))) {
+        url = d.file_url;
+      } else {
+        url = `/api/documents/${d.id}/download`;
+      }
+    }
+
+    const ext = String(d.file_type || d.file_name || '').toLowerCase().split('.').pop() || '';
+    const isImage = d.repository_type === 'photo'
+      || IMAGE_EXTS.includes(ext)
+      || IMAGE_MIMES.some(m => String(d.mime_type || '').startsWith(m));
+
+    return {
+      id: String(d.id || d.cdn_file_id || `att-${Math.random().toString(36).slice(2, 8)}`),
+      title: d.title || d.file_name || 'Berkas',
+      type: (isImage ? 'image' : (['pdf', 'doc', 'docx', 'xlsx', 'xls', 'txt', 'csv', 'md'].includes(ext) ? 'document' : 'file')) as 'image' | 'document' | 'file',
+      fileType: String(d.file_type || ext || 'FILE').toUpperCase(),
+      sizeKb: d.file_size_kb ? Number(d.file_size_kb) : undefined,
+      url,
+      downloadUrl: url
+    };
+  }));
+}
 
 interface FileRequestCheck {
   isRequest: boolean;
@@ -292,11 +335,15 @@ async function handleFileRequest(
 
   answer += `💡 *Tautan di atas terhubung langsung ke CDN berkecepatan tinggi dengan otentikasi API Key Kroombox Edge.*`;
 
+  // Lampiran terstruktur: foto dirender sebagai gambar, dokumen sebagai kartu unduhan
+  const attachments = await buildAttachments(docsToShow);
+
   return {
     success: true,
     answer,
     grounded: true,
     model: 'Kroombox-Edge-CDN',
+    attachments,
     sources: docsToShow.map((d: any) => ({
       chunk_id: `cdn-${d.id}`,
       document_name: d.title,
@@ -363,6 +410,22 @@ router.post('/query', async (req: Request, res: Response): Promise<void> => {
     if (isOutOfContext) {
       result.answer = formatOutOfContextResponse(query.trim(), orgName, docCount);
     }
+
+    // SEMBUNYI SEMENTARA: kembalikan nanti bila ingin jawaban RAG normal
+    // otomatis menyertakan lampiran CDN dari sumber jawaban.
+    // if (result.success && result.sources.length > 0) {
+    //   const srcDocIds = result.sources.map(s => String(s.document_id || '')).filter(Boolean);
+    //   if (srcDocIds.length > 0) {
+    //     const [attRows] = await p.query<any[]>(
+    //       `SELECT id, title, repository_type, file_type, file_size_kb, file_url, file_name, cdn_file_id
+    //        FROM documents WHERE id IN (?)`,
+    //       [srcDocIds]
+    //     );
+    //     if (attRows.length > 0) {
+    //       result.attachments = await buildAttachments(attRows);
+    //     }
+    //   }
+    // }
 
     res.json(result);
   } catch (err: any) {

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import {
+  MessageAttachment,
   User,
   Organization,
   DocumentItem,
@@ -1369,6 +1370,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let citations: CitationReference[] = [];
     let isGrounded = false;
     let modelName = 'space-bunny-free';
+    let attachments: MessageAttachment[] = [];
 
     try {
       // 1. Call real RAG backend service
@@ -1392,6 +1394,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             documentId: s.document_id
           }));
         }
+
+        // Lampiran multi-dokumen (foto/file/dokumen via Kroombox CDN) untuk dirender di bubble chat
+        if (Array.isArray(ragResponse.attachments) && ragResponse.attachments.length > 0) {
+          attachments = ragResponse.attachments;
+        }
       } else {
         throw new Error(ragResponse.error || 'RAG query returned empty');
       }
@@ -1413,7 +1420,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       grounded: isGrounded,
       model: modelName,
       retrievalLatencyMs: latencyMs,
-      responseTimeMs: latencyMs
+      responseTimeMs: latencyMs,
+      attachments
     };
 
     setChatMessages(prev => [...prev, assistantMsg]);

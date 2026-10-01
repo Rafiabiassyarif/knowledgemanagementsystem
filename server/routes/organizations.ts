@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import { requireAuth } from '../middleware/auth';
+import { ensureProjectRagKey, revokeProjectRagKey } from '../services/ragKeys';
 
 const router = Router();
 
@@ -167,6 +168,12 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       await p.query('UPDATE users SET organization_id = ? WHERE id = ?', [orgId, creatorId]);
     }
 
+    // Provision API key RAG khusus project ini (best-effort, non-blocking).
+    // Key disimpan di DB & dipakai otomatis setiap upload dokumen project.
+    ensureProjectRagKey(orgId, name.trim())
+      .then(r => console.log(`[PROJECT RAG] Key project "${name.trim()}" (${orgId}) siap (sumber: ${r.source}).`))
+      .catch(e => console.warn('[PROJECT RAG WARN] Provision key gagal:', e?.message || e));
+
     // Log activity
     await p.query(`
       INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
@@ -269,6 +276,9 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     await p.query('UPDATE users SET organization_id = NULL, org_join_status = "none" WHERE organization_id = ?', [id]);
     // Delete organization (documents and join requests will cascade)
     await p.query('DELETE FROM organizations WHERE id = ?', [id]);
+
+    // Cabut API key RAG milik project (best-effort, non-blocking)
+    revokeProjectRagKey(id).catch(e => console.warn('[PROJECT RAG WARN] Revoke key gagal:', e?.message || e));
 
     // Log activity
     await p.query(`

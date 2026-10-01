@@ -324,6 +324,7 @@ export const api = {
         usage?: any;
         model?: string;
         error?: string;
+        attachments?: any[];
       }>('/chat/query', {
         method: 'POST',
         body: JSON.stringify(params),

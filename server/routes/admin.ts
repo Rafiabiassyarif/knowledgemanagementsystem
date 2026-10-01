@@ -71,7 +71,7 @@ router.get('/overview', async (_req: Request, res: Response): Promise<void> => {
         cdn: cdnStats,
         ragEngine: {
           status: 'ready',
-          baseUrl: process.env.RAG_BASE_URL || 'https://ragjev.kii.lat',
+          baseUrl: process.env.RAG_BASE_URL || 'https://rag.aiones.app',
           model: 'Gemini Embedding & Retrieval'
         }
       }

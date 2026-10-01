@@ -4,11 +4,12 @@ import multer from 'multer';
 import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
 import { uploadToKroomboxCDN, deleteFromKroomboxCDN, createCDNSignedUrl, listKroomboxCDNFiles } from '../services/cdn';
 import { requireAuth } from '../middleware/auth';
+import { ensureProjectRagKey } from '../services/ragKeys';
 
 const router = Router();
 
-// Files are stored INSIDE MySQL (LONGBLOB), never on the filesystem.
-// Multer memory storage keeps the binary in RAM so we can insert it into the DB.
+// Files are NEVER stored in MySQL. Multer memory storage keeps the binary in RAM
+// only as a pass-through to Kroombox Edge CDN; DB stores metadata exclusively.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size (fits LONGBLOB)
@@ -311,8 +312,8 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI via CDN.`;
 
     await p.query(`
-      INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, file_data, year, summary, tags, notes, uploaded_by, uploaded_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+      INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, year, summary, tags, notes, uploaded_by, uploaded_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         title = VALUES(title),
         category = VALUES(category),
@@ -322,7 +323,6 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
         file_url = VALUES(file_url),
         cdn_file_id = VALUES(cdn_file_id),
         file_name = VALUES(file_name),
-        file_data = NULL,
         year = VALUES(year),
         summary = VALUES(summary),
         notes = VALUES(notes)
@@ -357,18 +357,23 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       title.trim()
     ]);
 
-    // Asynchronously index document to RAG Multi-Tenant Service
+    // Asynchronously index document to RAG Multi-Tenant Service.
+    // Pakai API key khusus project (auto-create bila belum ada; fallback master key
+    // saat RAG sedang down) supaya upload tidak pernah terblokir.
     const docDisplayName = file ? file.originalname : `${title.trim()}.${(fileType || 'pdf').toLowerCase()}`;
+    const projectKey = await ensureProjectRagKey(targetOrgId, orgName);
     indexDocumentToRag({
       documentId: docId,
       organizationId: targetOrgId,
       documentName: docDisplayName,
       contentBuffer: file ? file.buffer : null,
       text: summary,
+      apiKey: projectKey.key,
       metadata: {
         category,
         year: Number(year) || new Date().getFullYear(),
-        uploadedBy: uploadedBy || 'Admin'
+        uploadedBy: uploadedBy || 'Admin',
+        project_key_source: projectKey.source
       }
     }).catch(ragErr => {
       console.warn('[RAG AUTO-INDEX WARN]', ragErr);
@@ -481,14 +486,14 @@ function generatePdfBuffer(title: string, orgName: string, category: string, sum
   return Buffer.from(pdfString, 'utf-8');
 }
 
-// 5. Download document (served straight from the LONGBLOB in MySQL)
+// 5. Download document (redirect ke Kroombox CDN; fallback PDF untuk dokumen seed tanpa berkas)
 router.get('/:id/download', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();
 
     const [rows] = await p.query<any[]>(`
-      SELECT d.file_data, d.file_url, d.cdn_file_id, d.file_name, d.file_type, d.title, d.summary, d.category, o.name as organization_name 
+      SELECT d.file_url, d.cdn_file_id, d.file_name, d.file_type, d.title, d.summary, d.category, o.name as organization_name 
       FROM documents d 
       JOIN organizations o ON d.organization_id = o.id 
       WHERE d.id = ?
@@ -501,7 +506,7 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
 
     const doc = rows[0];
 
-    // 1. If CDN file ID exists, redirect directly to high-speed signed CDN delivery URL
+    // 1. CDN file ID -> redirect ke signed delivery URL berkecepatan tinggi
     if (doc.cdn_file_id) {
       try {
         const signedUrl = await createCDNSignedUrl(doc.cdn_file_id, 86400);
@@ -514,43 +519,15 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
       }
     }
 
-    // 2. If CDN URL exists and is HTTP/HTTPS, redirect directly to high-speed Kroombox CDN
+    // 2. URL CDN langsung -> redirect
     if (doc.file_url && (doc.file_url.startsWith('http://') || doc.file_url.startsWith('https://'))) {
       res.redirect(doc.file_url);
       return;
     }
     const ext = (doc.file_type || 'PDF').toLowerCase();
     const safeTitle = (doc.title || 'dokumen').replace(/[/\\?%*:|"<>]/g, '_');
-    const filename = doc.file_name || `${safeTitle}.${ext}`;
 
-    // 1. Binary stored in DB -> stream it out
-    if (doc.file_data) {
-      const buf = typeof doc.file_data === 'string'
-        ? Buffer.from(doc.file_data, 'binary')
-        : Buffer.from(doc.file_data);
-
-      const mimeMap: Record<string, string> = {
-        pdf: 'application/pdf',
-        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        doc: 'application/msword',
-        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        xls: 'application/vnd.ms-excel',
-        txt: 'text/plain; charset=utf-8',
-        csv: 'text/csv; charset=utf-8',
-        png: 'image/png',
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg'
-      };
-      const contentType = mimeMap[ext] || 'application/octet-stream';
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Length', buf.length);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
-      res.send(buf);
-      return;
-    }
-
-    // 2. Fallback for seeded/legacy docs without binary: generate a real PDF
+    // 3. Fallback dokumen seed/legacy tanpa berkas fisik: hasilkan PDF ringkasan
     const pdfBuf = generatePdfBuffer(doc.title, doc.organization_name, doc.category, doc.summary);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
@@ -573,7 +550,7 @@ router.post('/sync-rag', requireAuth, async (_req: Request, res: Response): Prom
         documentId: doc.id,
         organizationId: doc.organization_id,
         documentName: doc.file_name || `${doc.title}.${(doc.file_type || 'PDF').toLowerCase()}`,
-        contentBuffer: doc.file_data ? Buffer.from(doc.file_data) : null,
+        contentBuffer: null,
         text: doc.summary || doc.title,
         metadata: {
           category: doc.category,

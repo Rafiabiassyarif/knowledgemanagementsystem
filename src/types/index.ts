@@ -210,6 +210,17 @@ export interface CitationReference {
 
 export type SourceCitation = CitationReference;
 
+/** Lampiran multi-dokumen (foto/file/dokumen dari Kroombox CDN) pada pesan chat */
+export interface MessageAttachment {
+  id: string;
+  title: string;
+  type: 'image' | 'document' | 'file';
+  fileType?: string;
+  sizeKb?: number;
+  url: string;
+  downloadUrl?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -219,6 +230,7 @@ export interface ChatMessage {
   sources?: CitationReference[];
   citations?: CitationReference[];
   responseTimeMs?: number;
+  attachments?: MessageAttachment[];
   retrievalLatencyMs?: number;
   latency_ms?: number;
   organization_id?: string;

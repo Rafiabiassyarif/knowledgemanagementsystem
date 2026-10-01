@@ -335,7 +335,7 @@ export const CdnMonitoringPage: React.FC = () => {
           <div className="space-y-3 text-xs">
             <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500">RAG Base URL:</span>
-              <span className="font-mono font-medium text-slate-800 dark:text-slate-200">https://ragjev.kii.lat</span>
+              <span className="font-mono font-medium text-slate-800 dark:text-slate-200">https://rag.aiones.app</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500">Model Retrieval:</span>

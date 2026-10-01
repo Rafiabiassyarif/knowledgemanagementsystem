@@ -424,7 +424,7 @@ export const AskAIPage: React.FC = () => {
                   <div className="mt-3 space-y-2.5">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
                       <Paperclip className="w-3 h-3" />
-                      <span>Lampiran CDN ({msg.attachments.length})</span>
+                      <span>Lampiran ({msg.attachments.length})</span>
                     </div>
                     {msg.attachments.map(att => att.type === 'image' ? (
                       <a
@@ -457,7 +457,7 @@ export const AskAIPage: React.FC = () => {
                         <div className="min-w-0 flex-1">
                           <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{att.title}</div>
                           <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                            {att.fileType} {att.sizeKb ? `· ${att.sizeKb} KB` : ''} · Kroombox CDN
+                            {att.fileType} {att.sizeKb ? `· ${att.sizeKb} KB` : ''}
                           </div>
                         </div>
                         <Download className="w-4 h-4 text-slate-400 dark:text-slate-500 group-hover/att:text-blue-600 dark:group-hover/att:text-blue-400 shrink-0 transition-colors" />
@@ -474,7 +474,7 @@ export const AskAIPage: React.FC = () => {
                         <FileText className="w-3 h-3 text-blue-500" />
                         <span>Sumber Dokumen Terkait ({msg.sources.length}):</span>
                       </span>
-                      <span className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">Tersedia di CDN Edge</span>
+                      <span className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">Tersedia</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {msg.sources.map((src, idx) => {
@@ -502,7 +502,7 @@ export const AskAIPage: React.FC = () => {
                                 type="button"
                                 onClick={() => setSelectedDocForViewer(matchedDoc)}
                                 className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 underline cursor-pointer ml-1"
-                                title="Buka Dokumen di CDN Viewer"
+                                title="Buka Dokumen"
                               >
                                 <Eye className="w-3 h-3" />
                                 <span>Buka</span>

@@ -199,7 +199,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
         const generatedTags = ['resmi', item.category.toLowerCase(), item.repositoryType, item.fileType.toLowerCase(), 'kroombox-cdn'];
         const itemSummary = globalNotes.trim()
           ? `${globalNotes.trim()} (${fileTitle})`
-          : `Berkas ${fileTitle} kategori ${item.category} yang tersimpan di Kroombox Edge CDN dan terindeks untuk Project.`;
+          : `Berkas ${fileTitle} kategori ${item.category} yang tersimpan aman dan terindeks untuk Project.`;
 
         await uploadDocument({
           title: fileTitle,
@@ -258,7 +258,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
       isOpen={isOpen}
       onClose={processState === 'uploading' ? () => {} : handleReset}
       title="Unggah Dokumen & Pengetahuan"
-      subtitle="Berkas akan diindeks otomatis oleh sistem AI (RAG) untuk pencarian & tanya jawab, tersimpan aman di Kroombox Edge CDN."
+      subtitle="Berkas akan diindeks otomatis oleh sistem AI (RAG) untuk pencarian & tanya jawab."
     >
       {/* 1. UPLOADING IN PROGRESS STATE */}
       {processState === 'uploading' ? (
@@ -269,10 +269,10 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
 
           <div>
             <h4 className="text-base font-bold text-slate-900 dark:text-white">
-              Mengunggah Berkas {currentFileIndex} dari {queuedFiles.length} ke Edge CDN...
+              Mengunggah Berkas {currentFileIndex} dari {queuedFiles.length}...
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-              Menyimpan data fisik berkas ke CDN dan menyinkronkan embedding ke basis pengetahuan proyek Anda.
+              Menyimpan berkas dan menyinkronkan embedding ke basis pengetahuan proyek Anda.
             </p>
           </div>
 
@@ -301,7 +301,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
               {uploadedCount} Berkas Berhasil Diunggah!
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-              Seluruh berkas fisik telah tersimpan aman di <strong>Kroombox Edge CDN</strong> dan siap diakses di repositori dokumen project Anda.
+              Seluruh berkas telah tersimpan aman dan siap diakses di repositori dokumen project Anda.
             </p>
           </div>
 
@@ -314,7 +314,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                   <span className="font-medium truncate text-slate-800 dark:text-slate-200">{f.title}</span>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 shrink-0">
-                  CDN OK
+                  SIAP
                 </span>
               </div>
             ))}
@@ -652,14 +652,14 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             />
           </div>
 
-          {/* 7. Kroombox CDN Info Ribbon */}
+          {/* 7. Info Ribbon */}
           <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/60 flex items-center justify-between text-xs text-blue-800 dark:text-blue-300">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>Berkas disimpan di <strong>Kroombox CDN</strong> & terindeks ke RAG AI</span>
+              <span>Berkas tersimpan aman & terindeks ke RAG AI</span>
             </div>
             <span className="text-[10px] bg-blue-100 dark:bg-blue-900/80 px-2 py-0.5 rounded-md font-mono font-bold text-blue-700 dark:text-blue-300">
-              CDN Edge
+              RAG
             </span>
           </div>
 
@@ -680,7 +680,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
               <UploadCloud className="w-4 h-4" />
               <span>
                 {queuedFiles.length > 1
-                  ? `Unggah ${queuedFiles.length} Berkas ke CDN`
+                  ? `Unggah ${queuedFiles.length} Berkas`
                   : queuedFiles.length === 1
                     ? 'Unggah Dokumen'
                     : 'Pilih Berkas Dulu'}

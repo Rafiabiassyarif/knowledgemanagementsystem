@@ -113,7 +113,7 @@ export const DocumentsPage: React.FC = () => {
             </h1>
             <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              CDN Powered
+              Terindeks AI
             </span>
             {currentOrganization && (
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium flex items-center gap-1.5">
@@ -123,7 +123,7 @@ export const DocumentsPage: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Pusat penyimpanan berkas fisik di Kroombox Edge CDN dan basis pengetahuan AI RAG terisolasi per proyek.
+            Pusat penyimpanan berkas, dokumen, dan basis pengetahuan AI RAG terisolasi per proyek.
           </p>
         </div>
 
@@ -152,7 +152,7 @@ export const DocumentsPage: React.FC = () => {
               <span className="text-[11px] text-slate-400 font-mono">({totalStorageMb} MB)</span>
             </div>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block mt-0.5">
-              Tersimpan di Edge CDN
+              Tersimpan aman di cloud
             </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
@@ -375,7 +375,7 @@ export const DocumentsPage: React.FC = () => {
                 <th className="py-3 px-4">Kategori</th>
                 <th className="py-3 px-4">Proyek / Sumber</th>
                 <th className="py-3 px-4 text-center">Tahun</th>
-                <th className="py-3 px-4 text-right">Ukuran & CDN</th>
+                <th className="py-3 px-4 text-right">Ukuran</th>
                 <th className="py-3 px-4 text-center">Aksi</th>
               </tr>
             </thead>
@@ -467,7 +467,7 @@ export const DocumentsPage: React.FC = () => {
                       </span>
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1 font-mono font-medium">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Edge CDN
+                        Tersimpan
                       </span>
                     </td>
 
@@ -484,7 +484,7 @@ export const DocumentsPage: React.FC = () => {
                         <button
                           onClick={() => handleDownloadDoc(doc)}
                           className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                          title="Unduh Berkas dari CDN"
+                          title="Unduh Berkas"
                         >
                           <Download className="w-4 h-4" />
                         </button>
@@ -529,7 +529,7 @@ export const DocumentsPage: React.FC = () => {
                   <img src={doc.fileUrl} alt={doc.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                   <div className="absolute top-2 right-2">
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-sm">
-                      Foto CDN
+                      Foto
                     </span>
                   </div>
                 </div>
@@ -552,7 +552,7 @@ export const DocumentsPage: React.FC = () => {
                     </span>
                   </div>
                   <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-800/60 px-2 py-0.5 rounded-md font-medium">
-                    Edge CDN
+                    Tersimpan
                   </span>
                 </div>
 
@@ -584,7 +584,7 @@ export const DocumentsPage: React.FC = () => {
                     <button
                       onClick={() => handleDownloadDoc(doc)}
                       className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                      title="Unduh Berkas CDN"
+                      title="Unduh Berkas"
                     >
                       <Download className="w-4 h-4" />
                     </button>

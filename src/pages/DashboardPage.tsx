@@ -102,7 +102,7 @@ export const DashboardPage: React.FC = () => {
             </h1>
             <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              CDN Active
+              Sistem Aktif
             </span>
             {currentOrganization && (
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium flex items-center gap-1.5">
@@ -112,7 +112,7 @@ export const DashboardPage: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Monitoring repositori dokumen, aset media di Kroombox Edge CDN, dan basis pengetahuan per Project.
+            Monitoring repositori dokumen, aset media, dan basis pengetahuan per Project.
           </p>
         </div>
 
@@ -159,7 +159,7 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           label="Foto & Media"
           value={countPhoto}
-          change="Gambar di CDN"
+          change="Gambar tersimpan"
           icon={ImageIcon}
           variant="purple"
         />
@@ -171,9 +171,9 @@ export const DashboardPage: React.FC = () => {
           variant="amber"
         />
         <StatCard
-          label="Storage Edge CDN"
+          label="Storage Dokumen"
           value={`${totalStorageMb} MB`}
-          change="Kroombox Edge"
+          change="Tersimpan aman"
           icon={HardDrive}
           variant="rose"
         />
@@ -187,10 +187,10 @@ export const DashboardPage: React.FC = () => {
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Activity className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                Pertumbuhan Ingesti Berkas ke Edge CDN
+                Pertumbuhan Ingesti Berkas
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Akumulasi dokumen fisik dan foto tersimpan di CDN per bulan
+                Akumulasi dokumen dan foto tersimpan per bulan
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs">
@@ -363,7 +363,7 @@ export const DashboardPage: React.FC = () => {
                   Berkas & Media Terbaru
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Tersimpan di Kroombox Edge CDN
+                  Berkas & media terpusat, tersimpan aman
                 </p>
               </div>
               <Link 
@@ -421,7 +421,7 @@ export const DashboardPage: React.FC = () => {
                         </div>
                       </div>
                       <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0 font-semibold">
-                        Edge CDN
+                        Tersimpan
                       </span>
                     </div>
                   );

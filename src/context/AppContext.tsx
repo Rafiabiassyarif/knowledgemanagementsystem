@@ -135,7 +135,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return initialOrganizations;
   });
-  const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments);
+  // Dokumen: di-cache di localStorage agar daftar tetap tampil saat refresh
+  // (berkas fisik di CDN, metadata/URL di MySQL — cache ini hanya buffer UI)
+  const [documents, setDocuments] = useState<DocumentItem[]>(() => {
+    const saved = localStorage.getItem('kms_documents_store');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return initialDocuments;
+  });
   const [chunks, setChunks] = useState<KnowledgeChunk[]>(initialKnowledgeChunks);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     const saved = localStorage.getItem('kms_logs_store');
@@ -208,6 +216,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('kms_logs_store', JSON.stringify(activityLogs.slice(0, 50)));
   }, [activityLogs]);
+
+  // Cache daftar dokumen (metadata + URL CDN) agar tidak hilang saat refresh
+  useEffect(() => {
+    localStorage.setItem('kms_documents_store', JSON.stringify(documents));
+  }, [documents]);
 
   // Load and synchronize with MySQL backend on startup
   // Skip entirely when there is no session token: public pages (landing, login,

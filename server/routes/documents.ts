@@ -91,17 +91,17 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
             documents.push({
               id: `cdn-${cf.id}`,
               organizationId: (organizationId && organizationId !== 'all') ? (organizationId as string) : 'all',
-              organizationName: 'Kroombox Edge CDN',
+              organizationName: 'Repositori Digital',
               title: cf.name.replace(/\.[^/.]+$/, ""),
-              category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital CDN',
+              category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital',
               repositoryType: isImg ? 'photo' : 'document',
               fileType: cf.name.split('.').pop()?.toUpperCase() || (isImg ? 'JPG' : 'TXT'),
               fileSizeKb: Math.round((cf.size || 1024) / 1024) || 1,
               fileUrl: cf.url || `https://api-cdn.kroombox.com/api/bridge/view/${cf.id}`,
               cdnFileId: cf.id,
               year: new Date().getFullYear(),
-              department: 'Media & Aset CDN',
-              summary: `Berkas resmi tersimpan langsung di Kroombox Edge CDN (${cf.name})`,
+              department: 'Media & Aset Digital',
+              summary: `Berkas resmi tersimpan aman (${cf.name})`,
               tags: ['cdn', isImg ? 'photo' : 'document', 'kroombox'],
               notes: 'Tersimpan di Edge CDN',
               uploadedBy: 'CDN Storage',
@@ -293,7 +293,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
         console.error('[CDN UPLOAD FAILED]', cdnErr?.message || cdnErr);
         res.status(502).json({
           success: false,
-          message: `Gagal mengunggah berkas ke Kroombox Edge CDN: ${cdnErr?.message || 'CDN Error'}. MySQL tidak menyimpan berkas fisik.`
+          message: `Gagal mengunggah berkas: ${cdnErr?.message || 'Kesalahan penyimpanan'}. Silakan coba beberapa saat lagi.`
         });
         return;
       }
@@ -309,7 +309,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
     ]);
     const summary = notes && notes.trim()
       ? notes.trim()
-      : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI via CDN.`;
+      : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI.`;
 
     await p.query(`
       INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, year, summary, tags, notes, uploaded_by, uploaded_by_id)
@@ -373,7 +373,9 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
         category,
         year: Number(year) || new Date().getFullYear(),
         uploadedBy: uploadedBy || 'Admin',
-        project_key_source: projectKey.source
+        project_key_source: projectKey.source,
+        cdn_url: fileUrl,
+        cdn_file_id: cdnFileId
       }
     }).catch(ragErr => {
       console.warn('[RAG AUTO-INDEX WARN]', ragErr);

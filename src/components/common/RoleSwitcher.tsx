@@ -12,7 +12,7 @@ export const RoleSwitcher: React.FC = () => {
     {
       role: 'admin' as const,
       title: 'Admin · Administrator KMS',
-      sub: 'Kelola Kuota User, Monitoring CDN & Organisasi',
+      sub: 'Kelola Pengguna, Monitoring Sistem & Organisasi',
       // SEMBUNYI SEMENTARA: arahkan ke dashboard selama menu paket/kuota disembunyikan
       path: '/app',
       user: users.find(u => u.role === 'admin' || u.role === 'superadmin')

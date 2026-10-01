@@ -12,6 +12,15 @@ if (!RAG_API_KEY) {
   console.warn('[RAG SERVICE] RAG_API_KEY tidak ditemukan di .env — request ke RAG server akan ditolak.');
 }
 
+/** Format berkas yang didukung parser RAG (dikonfirmasi via API, 415 selain ini) */
+const RAG_SUPPORTED_EXTS = new Set([
+  '.cfg', '.conf', '.csv', '.doc', '.docm', '.docx', '.eml', '.env', '.epub',
+  '.htm', '.html', '.ini', '.json', '.jsonl', '.log', '.markdown', '.md',
+  '.ndjson', '.odp', '.ods', '.odt', '.pdf', '.ppt', '.pptm', '.pptx', '.rst',
+  '.rtf', '.sql', '.tex', '.tsv', '.txt', '.xhtml', '.xls', '.xlsm', '.xlsx',
+  '.xml', '.yaml', '.yml'
+]);
+
 export interface IndexDocumentParams {
   documentId: string;
   organizationId: string;
@@ -92,6 +101,26 @@ export async function indexDocumentToRag(params: IndexDocumentParams): Promise<{
       } else {
         docName = `${docName}.txt`;
       }
+    }
+
+    // Format yang TIDAK didukung parser RAG (foto/gambar/biner): kirim sebagai
+    // knowledge berbasis teks (judul + deskripsi + URL CDN) supaya tetap masuk
+    // knowledge base dan bisa dicari. Berkas fisiknya tetap di Kroombox CDN dan
+    // tetap bisa dirender di chat via alur attachment.
+    const docExt = docName.slice(docName.lastIndexOf('.')).toLowerCase();
+    if (!RAG_SUPPORTED_EXTS.has(docExt) && contentBase64) {
+      const cdnUrl = params.metadata?.cdn_url || params.metadata?.file_url;
+      const baseName = docName.slice(0, docName.lastIndexOf('.')) || docName;
+      const priorDescription = textContent; // summary dari pemanggil (bila ada)
+      textContent = [
+        `Berkas media: ${baseName}`,
+        `Jenis berkas: ${docExt.replace('.', '').toUpperCase() || 'BINER'} (media/gambar)`,
+        cdnUrl ? `Tautan berkas: ${cdnUrl}` : null,
+        `Keterangan: ${priorDescription || params.metadata?.notes || 'Media dokumentasi organisasi.'}`
+      ].filter(Boolean).join('\n');
+      contentBase64 = null;
+      docName = `${baseName}.txt`;
+      console.log(`[RAG SERVICE] Format "${docExt}" tidak didukung parser — dikirim sebagai entri teks.`);
     }
 
     // If no file binary and no text, provide meaningful fallback metadata text

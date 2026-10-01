@@ -64,7 +64,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       const res = addOrganization({
         name: name.trim(),
         code: finalCode,
-        description: description.trim() || `Project ${name} untuk pengelolaan berkas CDN dan basis pengetahuan.`,
+        description: description.trim() || `Project ${name} untuk pengelolaan berkas dan basis pengetahuan.`,
         type,
         sector: sector || 'Utilitas & Pengetahuan',
         province: 'DKI Jakarta',
@@ -103,7 +103,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       title={isMandatoryOnboarding ? "Buat Project Pertama Anda 🚀" : "Buat Project Baru"}
       subtitle={
         isMandatoryOnboarding
-          ? "Platform berbasis project. Silakan buat project pertama Anda untuk mulai mengunggah file, foto, dan mengelola knowledge base di Edge CDN."
+          ? "Platform berbasis project. Silakan buat project pertama Anda untuk mulai mengunggah file, foto, dan mengelola knowledge base."
           : "Tambahkan project baru untuk mengorganisir dokumen, foto/media, dan basis pengetahuan."
       }
     >
@@ -122,7 +122,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <span>Langkah Awal Memulai</span>
             </p>
             <p className="text-[11px] text-blue-700 dark:text-blue-300">
-              Setiap dokumen, galeri foto, dan basis pengetahuan tersimpan di Kroombox Edge CDN terisolasi per Project. Anda akan otomatis menjadi Pemilik/Admin dari project ini.
+              Setiap dokumen, galeri foto, dan basis pengetahuan tersimpan aman dan terisolasi per Project. Anda akan otomatis menjadi Pemilik/Admin dari project ini.
             </p>
           </div>
         )}

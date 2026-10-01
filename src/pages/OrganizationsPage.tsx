@@ -94,7 +94,7 @@ export const OrganizationsPage: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Ruang lingkup pengelolaan dokumen, galeri foto, dan basis pengetahuan terisolasi di Kroombox Edge CDN.
+                Ruang lingkup pengelolaan dokumen, galeri foto, dan basis pengetahuan terisolasi per organisasi.
               </p>
             </div>
           </div>
@@ -154,12 +154,12 @@ export const OrganizationsPage: React.FC = () => {
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2 tabular-nums">
               {totalDocuments}
             </p>
-            <p className="mt-1 text-[11px] text-slate-400">Tersimpan di Kroombox Edge CDN</p>
+            <p className="mt-1 text-[11px] text-slate-400">Tersimpan aman di cloud</p>
           </div>
 
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Kapasitas Edge CDN</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Kapasitas Penyimpanan</span>
               <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                 <HardDrive className="w-4 h-4" />
               </div>

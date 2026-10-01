@@ -158,7 +158,7 @@ export const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                    <span>Penyimpanan CDN Kroombox otomatis</span>
+                    <span>Penyimpanan otomatis</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -213,7 +213,7 @@ export const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                    <span>Kapasitas CDN berkecepatan tinggi</span>
+                    <span>Penyimpanan berkecepatan tinggi</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
@@ -243,7 +243,7 @@ export const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
 
         {/* Footer info */}
         <div className="text-center text-[11px] text-slate-400 dark:text-slate-500">
-          Semua dokumen yang diunggah disimpan dengan aman di <strong>Kroombox Edge CDN</strong> dan diindeks otomatis ke mesin pencarian RAG AI.
+          Semua dokumen yang diunggah disimpan dengan aman dan diindeks otomatis ke mesin pencarian RAG AI.
         </div>
       </div>
     </BottomSheet>

@@ -206,15 +206,15 @@ async function handleFileRequest(
             organization_id: orgId || 'all',
             organization_name: orgName,
             title: cf.name.replace(/\.[^/.]+$/, ""),
-            category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital CDN',
+            category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital',
             repository_type: isImg ? 'photo' : 'document',
             file_type: cf.name.split('.').pop()?.toUpperCase() || (isImg ? 'JPG' : 'FILE'),
             file_size_kb: Math.round((cf.size || 1024) / 1024) || 1,
             file_url: cf.url,
             file_name: cf.name,
             cdn_file_id: cf.id,
-            summary: `Berkas resmi tersimpan di Kroombox Edge CDN (${cf.name})`,
-            department: 'Media & Aset CDN'
+            summary: `Berkas resmi tersimpan aman (${cf.name})`,
+            department: 'Media & Aset Digital'
           });
         }
       }
@@ -226,7 +226,7 @@ async function handleFileRequest(
   if (rows.length === 0) {
     return {
       success: true,
-      answer: `Mohon maaf, saat ini repositori Edge CDN **${orgName}** belum memiliki berkas atau dokumen yang diunggah. Silakan hubungi Administrator untuk mempublikasikan berkas resmi yang Anda perlukan.`,
+      answer: `Mohon maaf, saat ini repositori **${orgName}** belum memiliki berkas atau dokumen yang diunggah. Silakan hubungi Administrator untuk mempublikasikan berkas resmi yang Anda perlukan.`,
       grounded: false,
       model: 'Kroombox-Edge-CDN',
       sources: []
@@ -313,11 +313,11 @@ async function handleFileRequest(
 
   let answer = '';
   if (isFallback) {
-    answer = `Berkas atau dokumen dengan kata kunci *" ${query} "* tidak ditemukan secara spesifik di repositori Edge CDN **${orgName}**.\n\n` +
-      `📁 **Berikut berkas resmi yang tersedia dan dapat langsung diakses via CDN:**\n\n`;
+    answer = `Berkas atau dokumen dengan kata kunci *" ${query} "* tidak ditemukan secara spesifik di repositori **${orgName}**.\n\n` +
+      `📁 **Berikut berkas resmi yang tersedia:**\n\n`;
   } else {
     const typeLabel = reqInfo.type === 'photo' ? 'Foto / Media' : (reqInfo.type === 'document' ? 'Dokumen' : 'Berkas / File');
-    answer = `Berikut adalah tautan langsung (**Edge CDN**) untuk ${typeLabel.toLowerCase()} yang Anda minta dari **${orgName}**:\n\n`;
+    answer = `Berikut adalah tautan berkas ${typeLabel.toLowerCase()} yang Anda minta dari **${orgName}**:\n\n`;
   }
 
   for (const d of docsToShow) {
@@ -328,12 +328,12 @@ async function handleFileRequest(
     answer += `${icon} **${d.title}**\n` +
       `• **Jenis**: ${label} (${(d.file_type || 'PDF').toUpperCase()} · ${d.file_size_kb || 0} KB)\n` +
       `• **Kategori**: ${d.category} · ${d.department || 'Umum'}\n` +
-      `• **Penyimpanan**: Kroombox High-Speed CDN Edge\n` +
-      `🔗 **Akses Berkas Langsung via CDN:**\n` +
-      `[📥 Unduh / Buka ${label} via CDN](${d.cdnUrl})\n\n`;
+      `• **Penyimpanan**: Repositori Digital Resmi\n` +
+      `🔗 **Akses Berkas:**\n` +
+      `[📥 Unduh / Buka ${label}](${d.cdnUrl})\n\n`;
   }
 
-  answer += `💡 *Tautan di atas terhubung langsung ke CDN berkecepatan tinggi dengan otentikasi API Key Kroombox Edge.*`;
+  answer += `💡 *Tautan di atas terhubung langsung ke berkas resmi organisasi.*`;
 
   // Lampiran terstruktur: foto dirender sebagai gambar, dokumen sebagai kartu unduhan
   const attachments = await buildAttachments(docsToShow);
@@ -342,7 +342,7 @@ async function handleFileRequest(
     success: true,
     answer,
     grounded: true,
-    model: 'Kroombox-Edge-CDN',
+    model: 'KMS-RAG-AI',
     attachments,
     sources: docsToShow.map((d: any) => ({
       chunk_id: `cdn-${d.id}`,
@@ -350,7 +350,7 @@ async function handleFileRequest(
       document_id: d.id,
       score: 1.0,
       page: 1,
-      section: `${d.category} (CDN File Delivery)`
+      section: `${d.category} — Repositori Digital`
     }))
   };
 }

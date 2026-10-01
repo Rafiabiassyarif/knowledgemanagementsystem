@@ -47,7 +47,7 @@ export const DocumentViewerModal: React.FC = () => {
             <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Penyimpanan</span>
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-center gap-1 font-mono">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Kroombox CDN
+              Tersimpan Aman
             </p>
           </div>
         </div>

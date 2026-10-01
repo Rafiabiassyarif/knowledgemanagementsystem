@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useApp } from '../../context/AppContext';
+import { API_BASE_URL, tokenStore } from '../../services/api';
 import { 
   Zap, 
   Check, 
@@ -37,9 +38,12 @@ export const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
     if (!currentUser) return;
     setIsProcessing(true);
     try {
-      const res = await fetch('/api/documents/upgrade-plan', {
+      const res = await fetch(`${API_BASE_URL}/documents/upgrade-plan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenStore.get() || ''}`
+        },
         body: JSON.stringify({ userId: currentUser.id, plan })
       });
       const data = await res.json();

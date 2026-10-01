@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { StatCard } from '../components/common/StatCard';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
-import { downloadProtectedFile } from '../services/api';
+import { downloadProtectedFile, API_BASE_URL } from '../services/api';
 import { 
   Building2, 
   Users, 
@@ -305,7 +305,7 @@ export const OrganizationDetailPage: React.FC = () => {
                     onClick={() => {
                       const targetUrl = (doc.fileUrl && !doc.fileUrl.startsWith('db://'))
                         ? doc.fileUrl
-                        : `/api/documents/${doc.id}/download`;
+                        : `${API_BASE_URL}/documents/${doc.id}/download`;
                       downloadProtectedFile(targetUrl, `${doc.title}.${(doc.fileType || 'PDF').toLowerCase()}`)
                         .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
                     }}

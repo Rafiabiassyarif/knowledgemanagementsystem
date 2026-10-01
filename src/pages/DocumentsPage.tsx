@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
 import { DocumentCategory } from '../types';
-import { downloadProtectedFile } from '../services/api';
+import { downloadProtectedFile, API_BASE_URL } from '../services/api';
 import { 
   FileText, 
   Search, 
@@ -92,7 +92,7 @@ export const DocumentsPage: React.FC = () => {
   const handleDownloadDoc = (doc: any) => {
     const targetUrl = (doc.fileUrl && !doc.fileUrl.startsWith('db://'))
       ? doc.fileUrl
-      : `/api/documents/${doc.id}/download`;
+      : `${API_BASE_URL}/documents/${doc.id}/download`;
     downloadProtectedFile(targetUrl, `${doc.title}.${(doc.fileType || 'PDF').toLowerCase()}`)
       .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
   };

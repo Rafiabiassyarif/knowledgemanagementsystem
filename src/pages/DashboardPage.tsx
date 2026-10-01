@@ -116,26 +116,28 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setCreateProjectModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>Project Baru</span>
-          </button>
+        {/* Action Buttons — hanya untuk admin/superadmin (halaman user tanpa tombol ini) */}
+        {(currentUser?.role === 'admin' || currentUser?.role === 'superadmin') && (
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setCreateProjectModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Project Baru</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setUploadModalOpen(true)}
-            className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all cursor-pointer"
-          >
-            <UploadCloud className="w-4 h-4 text-white group-hover:-translate-y-0.5 transition-transform duration-200" />
-            <span>Unggah Multi-Berkas</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setUploadModalOpen(true)}
+              className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <UploadCloud className="w-4 h-4 text-white group-hover:-translate-y-0.5 transition-transform duration-200" />
+              <span>Unggah Multi-Berkas</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. Key Statistics Ribbon */}

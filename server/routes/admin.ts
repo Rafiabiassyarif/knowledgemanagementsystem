@@ -72,7 +72,7 @@ router.get('/overview', async (_req: Request, res: Response): Promise<void> => {
         ragEngine: {
           status: 'ready',
           baseUrl: process.env.RAG_BASE_URL || 'https://rag.aiones.app',
-          model: 'Gemini Embedding & Retrieval'
+          model: 'Jev RAG Embedding & Retrieval'
         }
       }
     });

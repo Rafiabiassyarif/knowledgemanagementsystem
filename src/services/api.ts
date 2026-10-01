@@ -3,7 +3,14 @@
  * Connects frontend directly to the Express + MySQL backend
  */
 
-const BASE_URL = '/api';
+/**
+ * Base URL API.
+ * - Default '/api': cocok untuk dev (Vite proxy) atau hosting same-domain dengan reverse proxy.
+ * - Saat frontend dihosting terpisah dari backend, set VITE_API_BASE_URL sebelum build,
+ *   contoh: VITE_API_BASE_URL=https://api.domainanda.com/api
+ */
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api';
+const BASE_URL = API_BASE_URL;
 
 // ---- JWT Token Management ----
 const TOKEN_KEY = 'kms_auth_token';
@@ -74,7 +81,7 @@ export async function downloadProtectedFile(url: string, filename: string): Prom
   let downloadUrl = url;
   if (downloadUrl.startsWith('db://')) {
     const docId = downloadUrl.replace('db://', '');
-    downloadUrl = `/api/documents/${docId}/download`;
+    downloadUrl = `${API_BASE_URL}/documents/${docId}/download`;
   }
 
   // Handle external CDN URLs

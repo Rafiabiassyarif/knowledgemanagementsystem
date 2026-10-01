@@ -93,7 +93,7 @@ const DEFAULT_PACKAGES: PackageTier[] = [
       'Hingga 100 Dokumen RAG',
       'Penyimpanan CDN 10 GB Dedicated',
       'Prioritas Node Edge PoP Jakarta',
-      'Gemini Vector Embeddings Cepat',
+      'Vector Embeddings RAG Cepat',
       'Ekspor Metadata Dokumen & SOP'
     ],
     isSystem: true

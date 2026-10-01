@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, tokenStore } from '../services/api';
 import { 
   HardDrive, 
   Cpu, 
@@ -29,10 +30,11 @@ export const CdnMonitoringPage: React.FC = () => {
   const fetchCdnData = async () => {
     setIsLoading(true);
     try {
+      const authHeaders = { 'Authorization': `Bearer ${tokenStore.get() || ''}` };
       const [statsRes, healthRes, overviewRes] = await Promise.all([
-        fetch('/api/cdn/stats').catch(() => null),
-        fetch('/api/cdn/health').catch(() => null),
-        fetch('/api/admin/overview').catch(() => null)
+        fetch(`${API_BASE_URL}/cdn/stats`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/cdn/health`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/admin/overview`, { headers: authHeaders }).catch(() => null)
       ]);
 
       if (statsRes && statsRes.ok) {
@@ -61,7 +63,7 @@ export const CdnMonitoringPage: React.FC = () => {
   const handleTestHealth = async () => {
     setTestingHealth(true);
     try {
-      const res = await fetch('/api/cdn/health');
+      const res = await fetch(`${API_BASE_URL}/cdn/health`, { headers: { 'Authorization': `Bearer ${tokenStore.get() || ''}` } });
       if (res.ok) {
         const data = await res.json();
         setHealthData(data.health);
@@ -77,7 +79,7 @@ export const CdnMonitoringPage: React.FC = () => {
     setIsSyncingRag(true);
     setSyncMessage(null);
     try {
-      const res = await fetch('/api/documents/sync-rag', { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/documents/sync-rag`, { method: 'POST', headers: { 'Authorization': `Bearer ${tokenStore.get() || ''}` } });
       const data = await res.json();
       if (res.ok && data.success) {
         setSyncMessage({
@@ -339,7 +341,7 @@ export const CdnMonitoringPage: React.FC = () => {
             </div>
             <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500">Model Retrieval:</span>
-              <span className="font-medium text-slate-800 dark:text-slate-200">Google Gemini Embedding + Vector KNN</span>
+              <span className="font-medium text-slate-800 dark:text-slate-200">RAG Vector Embedding + Hybrid Retrieval</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500">Pemisahan Repositori:</span>

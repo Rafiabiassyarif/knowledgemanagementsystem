@@ -6,23 +6,18 @@ import { TopHeader } from './TopHeader';
 import { MobileNav } from './MobileNav';
 import { DocumentViewerModal } from '../common/DocumentViewerModal';
 import { ChunkInspectorModal } from '../common/ChunkInspectorModal';
+import { CreateProjectModal } from '../common/CreateProjectModal';
 import { X } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
-  const { currentUser, currentOrganization, sidebarCollapsed } = useApp();
+  const { currentUser, currentOrganization, organizations, sidebarCollapsed } = useApp();
   const location = useLocation();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
-  const isChatRoute = location.pathname.includes('/chat') || (location.pathname === '/app' && currentUser?.role === 'user');
+  const [dismissOnboarding, setDismissOnboarding] = useState(false);
 
   // Guard: if user is not logged in, redirect to login page
   if (!currentUser) {
     return <Navigate to="/login" replace />;
-  }
-
-  // Guard: if Admin has not created an organization yet, lock them to the onboarding page (/app)
-  if (currentUser.role === 'admin' && !currentOrganization && location.pathname !== '/app') {
-    return <Navigate to="/app" replace />;
   }
 
   return (
@@ -62,19 +57,11 @@ export const AppLayout: React.FC = () => {
       <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden pb-16 lg:pb-0">
         <TopHeader onOpenMobileMenu={() => setMobileDrawerOpen(true)} />
 
-        {isChatRoute ? (
-          <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="p-3 sm:p-4 lg:p-6 max-w-5xl w-full mx-auto h-full flex flex-col min-h-0 overflow-hidden">
-              <Outlet />
-            </div>
-          </main>
-        ) : (
-          <main className="flex-1 min-h-0 overflow-y-auto">
-            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto min-h-full flex flex-col">
-              <Outlet />
-            </div>
-          </main>
-        )}
+        <main className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto min-h-full flex flex-col">
+            <Outlet />
+          </div>
+        </main>
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -83,6 +70,13 @@ export const AppLayout: React.FC = () => {
       {/* Global Modals for Document & Chunk preview */}
       <DocumentViewerModal />
       <ChunkInspectorModal />
+
+      {/* Onboarding opsional untuk akun baru yang belum memiliki project sama sekali */}
+      <CreateProjectModal
+        isOpen={!dismissOnboarding && organizations.length === 0 && currentUser.role !== 'superadmin'}
+        isMandatoryOnboarding={true}
+        onClose={() => setDismissOnboarding(true)}
+      />
     </div>
   );
 };

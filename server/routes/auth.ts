@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import bcrypt from 'bcryptjs';
+import { generateToken, requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -29,16 +30,31 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
     const user = rows[0];
 
-    // If password_hash exists, compare; otherwise demo accepts password for dev convenience
-    if (user.password_hash) {
-      const match = await bcrypt.compare(password, user.password_hash);
-      if (!match) {
-        res.status(401).json({ success: false, message: 'Kata sandi tidak sesuai.' });
-        return;
-      }
+    if (user.status !== 'active') {
+      res.status(403).json({ success: false, message: 'Akun Anda tidak aktif. Hubungi admin organisasi.' });
+      return;
     }
 
-    // Format user response object
+    // Password is now REQUIRED for every account (incl. seeded demo users)
+    if (!user.password_hash) {
+      res.status(401).json({ success: false, message: 'Akun ini belum memiliki kata sandi. Hubungi admin.' });
+      return;
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      res.status(401).json({ success: false, message: 'Kata sandi tidak sesuai.' });
+      return;
+    }
+
+    const token = generateToken({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organization_id
+    });
+
     const userRes = {
       id: user.id,
       name: user.name,
@@ -46,6 +62,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       role: user.role,
       organizationId: user.organization_id,
       organizationName: user.organization_name,
+      organizationCode: user.organization_code,
       department: user.department,
       status: user.status,
       avatarInitials: user.avatar_initials || user.name.slice(0, 2).toUpperCase(),
@@ -56,19 +73,23 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       joinedAt: user.created_at
     };
 
-    res.json({ success: true, user: userRes });
+    res.json({ success: true, token, user: userRes });
   } catch (err: any) {
     console.error('[AUTH ERROR]', err);
     res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat login.' });
   }
 });
 
-// 2. Superadmin Login
+// 2. Superadmin Login (now with mandatory password validation)
 router.post('/superadmin-login', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
-    const p = getPool();
+    if (!email || !password) {
+      res.status(400).json({ success: false, message: 'Email dan kata sandi wajib diisi.' });
+      return;
+    }
 
+    const p = getPool();
     const [rows] = await p.query<any[]>(
       `SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND role = 'superadmin'`,
       [email.trim()]
@@ -80,6 +101,26 @@ router.post('/superadmin-login', async (req: Request, res: Response): Promise<vo
     }
 
     const user = rows[0];
+
+    if (!user.password_hash) {
+      res.status(401).json({ success: false, message: 'Akun superadmin belum memiliki kata sandi. Hubungi pengelola sistem.' });
+      return;
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      res.status(401).json({ success: false, message: 'Kata sandi tidak sesuai.' });
+      return;
+    }
+
+    const token = generateToken({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: 'superadmin',
+      organizationId: null
+    });
+
     const userRes = {
       id: user.id,
       name: user.name,
@@ -87,7 +128,7 @@ router.post('/superadmin-login', async (req: Request, res: Response): Promise<vo
       role: 'superadmin',
       organizationId: null,
       organizationName: null,
-      department: 'Platform Governance & Cloud Engineering',
+      department: user.department || 'Platform Governance & Cloud Engineering',
       status: 'active',
       avatarInitials: user.avatar_initials || 'SA',
       avatarUrl: user.avatar_url,
@@ -95,7 +136,7 @@ router.post('/superadmin-login', async (req: Request, res: Response): Promise<vo
       joinedAt: user.created_at
     };
 
-    res.json({ success: true, user: userRes });
+    res.json({ success: true, token, user: userRes });
   } catch (err: any) {
     console.error('[SUPERADMIN AUTH ERROR]', err);
     res.status(500).json({ success: false, message: 'Kesalahan internal server.' });
@@ -111,21 +152,23 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    if (String(password).length < 6) {
+      res.status(400).json({ success: false, message: 'Kata sandi minimal 6 karakter.' });
+      return;
+    }
+
     const p = getPool();
 
-    // Check if email already registered
     const [existing] = await p.query<any[]>('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [email.trim()]);
     if (existing.length > 0) {
       res.status(400).json({ success: false, message: 'Email sudah terdaftar. Silakan masuk menggunakan akun tersebut.' });
       return;
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
     const initials = name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'US';
     const userId = `usr-${Date.now()}`;
 
-    // Check organization code if provided
     let orgId: string | null = null;
     let orgName: string | null = null;
     let orgStatus: 'joined' | 'pending' | 'none' = 'none';
@@ -149,6 +192,14 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       [userId, name.trim(), email.trim().toLowerCase(), passwordHash, orgId, initials, phone || null, employeeId || null, orgStatus]
     );
 
+    const token = generateToken({
+      id: userId,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      role: 'user',
+      organizationId: orgId
+    });
+
     const newUser = {
       id: userId,
       name: name.trim(),
@@ -164,11 +215,12 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       joinedAt: new Date().toISOString()
     };
 
-    res.status(201).json({ 
-      success: true, 
-      message: 'Registrasi berhasil!', 
+    res.status(201).json({
+      success: true,
+      message: 'Registrasi berhasil!',
+      token,
       user: newUser,
-      requiresOrgJoin: !orgId 
+      requiresOrgJoin: !orgId
     });
   } catch (err: any) {
     console.error('[REGISTER ERROR]', err);
@@ -176,10 +228,15 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 4. Update Profile
-router.put('/profile/:id', async (req: Request, res: Response): Promise<void> => {
+// 4. Update Profile (protected: only the owner, an org admin, or superadmin)
+router.put('/profile/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (req.authUser!.id !== id && req.authUser!.role !== 'superadmin') {
+      res.status(403).json({ success: false, message: 'Anda hanya dapat mengubah profil sendiri.' });
+      return;
+    }
+
     const { name, email, phone, avatarUrl, department, employeeId } = req.body;
 
     const p = getPool();
@@ -198,7 +255,6 @@ router.put('/profile/:id', async (req: Request, res: Response): Promise<void> =>
       [name, email, phone, avatarUrl, initials, department, employeeId, id]
     );
 
-    // Fetch updated user
     const [rows] = await p.query<any[]>(
       `SELECT u.*, o.name as organization_name 
        FROM users u 
@@ -237,10 +293,15 @@ router.put('/profile/:id', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// 5. Change Password
-router.put('/change-password/:id', async (req: Request, res: Response): Promise<void> => {
+// 5. Change Password (protected: owner or superadmin)
+router.put('/change-password/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (req.authUser!.id !== id && req.authUser!.role !== 'superadmin') {
+      res.status(403).json({ success: false, message: 'Anda hanya dapat mengubah kata sandi sendiri.' });
+      return;
+    }
+
     const { oldPassword, newPassword } = req.body;
 
     if (!newPassword || newPassword.length < 6) {
@@ -256,7 +317,11 @@ router.put('/change-password/:id', async (req: Request, res: Response): Promise<
     }
 
     const currentHash = rows[0].password_hash;
-    if (currentHash && oldPassword) {
+    if (currentHash) {
+      if (!oldPassword) {
+        res.status(400).json({ success: false, message: 'Kata sandi saat ini wajib diisi.' });
+        return;
+      }
       const match = await bcrypt.compare(oldPassword, currentHash);
       if (!match) {
         res.status(400).json({ success: false, message: 'Kata sandi saat ini tidak cocok.' });

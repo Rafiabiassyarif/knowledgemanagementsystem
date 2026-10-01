@@ -61,6 +61,8 @@ export interface User {
   emergencyContact?: string;
   serverCluster?: string;
   orgJoinStatus?: 'joined' | 'pending' | 'none';
+  docQuota?: number;
+  plan?: 'free' | 'pro' | 'enterprise';
   // compatibility aliases
   organization_id?: string | null;
   organization_name?: string | null;
@@ -89,8 +91,9 @@ export interface DocumentItem {
   organizationName: string;
   title: string;
   category: DocumentCategory;
+  repositoryType?: 'document' | 'photo' | 'knowledge';
   year: number;
-  fileType: 'PDF' | 'DOCX' | 'XLSX';
+  fileType: 'PDF' | 'DOCX' | 'XLSX' | 'IMAGE' | 'TXT' | 'FILE' | string;
   fileSizeKb: number;
   uploadedBy: string;
   uploadedAt: string;
@@ -100,6 +103,9 @@ export interface DocumentItem {
   summary: string;
   tags: string[];
   department?: string;
+  fileUrl?: string;
+  cdnFileId?: string;
+  notes?: string;
   // compatibility aliases
   organization_id?: string;
   organization_name?: string;
@@ -164,8 +170,8 @@ export interface JoinRequest {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   requestedAt: string;
-  userId?: string;
-  organizationId?: string;
+  userId: string | null;
+  organizationId: string;
   // compatibility aliases
   user_id?: string;
   user_name?: string;
@@ -216,4 +222,6 @@ export interface ChatMessage {
   retrievalLatencyMs?: number;
   latency_ms?: number;
   organization_id?: string;
+  grounded?: boolean;
+  model?: string;
 }

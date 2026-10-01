@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { StatCard } from '../components/common/StatCard';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
+import { downloadProtectedFile } from '../services/api';
 import { 
   Building2, 
   Users, 
@@ -20,6 +21,7 @@ import {
   Search,
   Eye,
   Trash2,
+  Download,
   AlertTriangle
 } from 'lucide-react';
 
@@ -47,14 +49,25 @@ export const OrganizationDetailPage: React.FC = () => {
 
   // Target org
   const org = organizations.find(o => o.id === id) || organizations[0];
+  if (!org) {
+    return (
+      <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+        <p className="text-sm text-slate-500">Project tidak ditemukan.</p>
+        <Link to="/app/projects" className="mt-3 inline-block text-xs font-semibold text-blue-600">
+          Kembali ke Daftar Project
+        </Link>
+      </div>
+    );
+  }
+
   const orgDocs = documents.filter(d => d.organizationId === org.id);
   const orgChunks = chunks.filter(c => c.organizationId === org.id);
   const orgUsers = users.filter(u => u.organizationId === org.id);
   const orgLogs = activityLogs.filter(l => l.organizationId === org.id);
 
   // Settings form states
-  const [orgDesc, setOrgDesc] = useState(org.description);
-  const [orgSector, setOrgSector] = useState(org.sector);
+  const [orgDesc, setOrgDesc] = useState(org.description || '');
+  const [orgSector, setOrgSector] = useState(org.sector || '');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -83,17 +96,17 @@ export const OrganizationDetailPage: React.FC = () => {
       {/* Back button & Title lockup */}
       <div>
         <Link 
-          to="/organizations" 
+          to="/app/projects" 
           className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors mb-2"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Kembali ke Daftar Organisasi
+          Kembali ke Daftar Project
         </Link>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-slate-700 to-indigo-800 dark:from-slate-800 dark:to-slate-700 text-white flex items-center justify-center font-bold text-base shadow-xs shrink-0">
-              {org.code.slice(0, 3)}
+              {(org.code || 'ORG').slice(0, 3)}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -118,15 +131,7 @@ export const OrganizationDetailPage: React.FC = () => {
               className="group inline-flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm hover:shadow-md hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
               <UploadCloud className="w-4 h-4 text-white shrink-0 group-hover:-translate-y-0.5 transition-transform duration-200" />
-              <span className="tracking-tight">Unggah Dokumen</span>
             </button>
-            <Link
-              to="/app/chat"
-              className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 border border-slate-200 dark:border-slate-700"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Tanya RAG</span>
-            </Link>
           </div>
         </div>
       </div>
@@ -135,8 +140,7 @@ export const OrganizationDetailPage: React.FC = () => {
       <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-px">
         {[
           { key: 'overview', label: 'Overview' },
-          { key: 'users', label: `Users (${orgUsers.length})` },
-          { key: 'documents', label: `Documents (${orgDocs.length})` },
+          { key: 'documents', label: `Dokumen & Berkas (${orgDocs.length})` },
           { key: 'activity', label: 'Activity' },
           { key: 'settings', label: 'Settings' },
         ].map((tab) => (
@@ -160,10 +164,10 @@ export const OrganizationDetailPage: React.FC = () => {
           {/* 5 Stats as requested */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <StatCard
-              label="Total Users"
-              value={org.usersCount}
-              change="Pengguna terdaftar"
-              icon={Users}
+              label="Knowledge Chunks"
+              value={org.chunksCount || orgChunks.length}
+              change="Basis pengetahuan"
+              icon={Cpu}
             />
             <StatCard
               label="Total Documents"
@@ -243,46 +247,7 @@ export const OrganizationDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: USERS */}
-      {activeTab === 'users' && (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Cari user di organisasi ini..."
-                value={userSearchQuery}
-                onChange={(e) => setUserSearchQuery(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-600"
-              />
-            </div>
-          </div>
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filteredUsers.map((u) => (
-              <div key={u.id} className="py-3 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-800 text-white font-semibold flex items-center justify-center text-xs">
-                    {u.avatarInitials}
-                  </div>
-                  <div>
-                    <span className="font-semibold text-slate-900 dark:text-white block">{u.name}</span>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">{u.email}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${
-                    u.role === 'admin' ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}>
-                    {u.role.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* TAB 3: DOCUMENTS */}
       {activeTab === 'documents' && (
@@ -323,7 +288,7 @@ export const OrganizationDetailPage: React.FC = () => {
                       {doc.title}
                     </span>
                     <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                      {doc.category} · {doc.year} · {doc.chunksCount} chunks
+                      {doc.category} · {doc.year} · {Math.round(doc.fileSizeKb / 1024 * 10) / 10} MB
                     </span>
                   </div>
                 </div>
@@ -335,6 +300,19 @@ export const OrganizationDetailPage: React.FC = () => {
                     title="Buka Viewer"
                   >
                     <Eye className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const targetUrl = (doc.fileUrl && !doc.fileUrl.startsWith('db://'))
+                        ? doc.fileUrl
+                        : `/api/documents/${doc.id}/download`;
+                      downloadProtectedFile(targetUrl, `${doc.title}.${(doc.fileType || 'PDF').toLowerCase()}`)
+                        .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
+                    }}
+                    className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-md cursor-pointer"
+                    title="Unduh Berkas"
+                  >
+                    <Download className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => {
@@ -480,11 +458,7 @@ export const OrganizationDetailPage: React.FC = () => {
                 onClick={() => {
                   deleteOrganization(org.id);
                   setDeleteConfirmOpen(false);
-                  if (currentUser?.role === 'admin') {
-                    navigate('/app');
-                  } else {
-                    navigate('/organizations');
-                  }
+                  navigate('/app/projects');
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >

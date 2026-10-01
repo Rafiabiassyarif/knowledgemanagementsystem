@@ -84,7 +84,7 @@ export const JoinOrgPage: React.FC = () => {
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
           {currentOrganization 
             ? 'Informasi organisasi aktif dan status keanggotaan Anda.' 
-            : 'Pilih organisasi untuk mulai menggunakan fitur Tanya AI.'}
+            : 'Pilih organisasi untuk mengakses repositori dokumen dan unggahan berkas RAG.'}
         </p>
       </div>
 
@@ -137,11 +137,11 @@ export const JoinOrgPage: React.FC = () => {
               {/* Action Buttons */}
               <div className="flex flex-row md:flex-col items-center gap-2 shrink-0">
                 <Link
-                  to="/app/chat"
+                  to="/app/documents"
                   className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-xs transition-colors"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Buka Tanya AI</span>
+                  <FileText className="w-4 h-4" />
+                  <span>Buka Repositori</span>
                 </Link>
 
                 <button
@@ -199,7 +199,7 @@ export const JoinOrgPage: React.FC = () => {
               <div>
                 <p className="font-semibold text-slate-900 dark:text-white">Peraturan Keanggotaan Multi-Tenant KMS</p>
                 <p className="text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                  Setiap pengguna hanya dapat terdaftar pada satu organisasi aktif dalam satu waktu demi menjaga privasi dan isolasi data Tanya AI organisasi. Untuk bergabung ke organisasi lain, silakan klik tombol <strong>Keluar Organisasi</strong> di atas terlebih dahulu.
+                  Setiap pengguna hanya dapat terdaftar pada satu organisasi aktif dalam satu waktu demi menjaga privasi dan isolasi repositori dokumen RAG organisasi. Untuk bergabung ke organisasi lain, silakan klik tombol <strong>Keluar Organisasi</strong> di atas terlebih dahulu.
                 </p>
               </div>
             </div>
@@ -218,7 +218,7 @@ export const JoinOrgPage: React.FC = () => {
                 Anda Belum Tergabung dalam Organisasi
               </h3>
               <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                Pilih salah satu organisasi di bawah ini untuk mulai menggunakan asisten Tanya AI pintar.
+                Pilih salah satu organisasi di bawah ini untuk mulai mengakses repositori berkas &amp; dokumen RAG.
               </p>
             </div>
           </div>
@@ -333,7 +333,7 @@ export const JoinOrgPage: React.FC = () => {
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   Apakah Anda yakin ingin keluar dari <strong className="text-slate-800 dark:text-slate-200">{currentOrganization.name}</strong>? 
-                  Anda tidak akan dapat lagi menggunakan asisten Tanya AI internal organisasi ini sampai Anda bergabung kembali.
+                  Anda tidak akan dapat lagi mengakses repositori dokumen dan berkas RAG organisasi ini sampai Anda bergabung kembali.
                 </p>
               </div>
             </div>

@@ -1,15 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
 // 1. Get all organizations with calculated stats
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
     const p = getPool();
     const [rows] = await p.query<any[]>(`
       SELECT 
         o.*,
+        COALESCE(
+          (SELECT email FROM users u WHERE u.organization_id = o.id AND u.role = 'admin' LIMIT 1),
+          o.email
+        ) as adminEmail,
         (SELECT COUNT(*) FROM documents d WHERE d.organization_id = o.id) as documentsCount,
         (SELECT COUNT(*) FROM users u WHERE u.organization_id = o.id) as usersCount
       FROM organizations o
@@ -30,6 +35,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       website: r.website,
       description: r.description,
       adminName: r.admin_name,
+      adminEmail: r.adminEmail || r.email || null,
       status: r.status,
       documentsCount: Number(r.documentsCount) || 0,
       usersCount: Number(r.usersCount) || 0,
@@ -47,7 +53,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 });
 
 // 2. Get single organization detail
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();
@@ -55,6 +61,10 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     const [rows] = await p.query<any[]>(`
       SELECT 
         o.*,
+        COALESCE(
+          (SELECT email FROM users u WHERE u.organization_id = o.id AND u.role = 'admin' LIMIT 1),
+          o.email
+        ) as adminEmail,
         (SELECT COUNT(*) FROM documents d WHERE d.organization_id = o.id) as documentsCount,
         (SELECT COUNT(*) FROM users u WHERE u.organization_id = o.id) as usersCount
       FROM organizations o
@@ -81,6 +91,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       website: r.website,
       description: r.description,
       adminName: r.admin_name,
+      adminEmail: r.adminEmail || r.email || null,
       status: r.status,
       documentsCount: Number(r.documentsCount) || 0,
       usersCount: Number(r.usersCount) || 0,
@@ -98,7 +109,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // 3. Create new organization
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       name,
@@ -129,18 +140,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     if (existing.length > 0) {
       res.status(400).json({ success: false, message: `Kode organisasi "${code}" sudah digunakan. Gunakan kode lain.` });
       return;
-    }
-
-    // If creator is admin, check 1-org limit
-    if (creatorRole === 'admin' && creatorId) {
-      const [adminUser] = await p.query<any[]>('SELECT organization_id FROM users WHERE id = ?', [creatorId]);
-      if (adminUser.length > 0 && adminUser[0].organization_id) {
-        res.status(403).json({ 
-          success: false, 
-          message: 'Batas kuota tercapai: Akun Admin hanya diizinkan mengelola maksimal 1 organisasi aktif.' 
-        });
-        return;
-      }
     }
 
     const orgId = `org-${Date.now()}`;
@@ -212,10 +211,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // 4. Update organization
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, type, sector, province, city, address, phone, email, website, description, adminName } = req.body;
+    const { name, code, type, sector, province, city, address, phone, email, adminEmail, website, description, adminName } = req.body;
+    const targetEmail = adminEmail || email;
 
     const p = getPool();
     await p.query(`
@@ -233,7 +233,16 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
           description = COALESCE(?, description),
           admin_name = COALESCE(?, admin_name)
       WHERE id = ?
-    `, [name, code, type, sector, province, city, address, phone, email, website, description, adminName, id]);
+    `, [name, code, type, sector, province, city, address, phone, targetEmail, website, description, adminName, id]);
+
+    if (adminName || targetEmail) {
+      await p.query(`
+        UPDATE users 
+        SET name = COALESCE(?, name),
+            email = COALESCE(?, email)
+        WHERE organization_id = ? AND role = 'admin'
+      `, [adminName, targetEmail, id]);
+    }
 
     res.json({ success: true, message: 'Data organisasi berhasil diperbarui.' });
   } catch (err: any) {
@@ -243,7 +252,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // 5. Delete organization
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();
@@ -275,7 +284,7 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // 6. Toggle status
-router.patch('/:id/toggle-status', async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id/toggle-status', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { AuthLayout } from '../components/layout/AuthLayout';
 import { Lock, Mail, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useApp();
 
   const [email, setEmail] = useState('');
@@ -15,32 +16,45 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-
-    if (!email || !password) {
-      setErrorMessage('Mohon masukkan email dan kata sandi Anda.');
-      return;
+  // Auto-fill from URL query param if present (e.g. /login?role=admin or /login?role=user)
+  useEffect(() => {
+    const roleParam = searchParams.get('role');
+    if (roleParam === 'admin') {
+      setEmail('admin@kms.id');
+      setPassword('password123');
+    } else if (roleParam === 'user') {
+      setEmail('user@kms.id');
+      setPassword('password123');
     }
+  }, [searchParams]);
 
+  const executeLogin = async (loginEmail: string, loginPass: string) => {
+    setErrorMessage('');
     setIsLoading(true);
-    setTimeout(() => {
-      const res = login(email, password);
-      setIsLoading(false);
-
+    try {
+      const res = await login(loginEmail, loginPass);
       if (!res.success) {
         setErrorMessage(res.message || 'Email atau kata sandi tidak sesuai.');
         return;
       }
-
       navigate('/app');
-    }, 350);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setErrorMessage('Mohon masukkan email dan kata sandi Anda.');
+      return;
+    }
+    executeLogin(email, password);
   };
 
   return (
     <AuthLayout
-      subtitle="Masuk ke portal KMS BUMD untuk mengakses basis pengetahuan &amp; Tanya AI"
+      subtitle="Masuk ke portal KMS BUMD untuk mengunggah dokumen, berkas &amp; foto RAG"
     >
       {/* Error Alert with shake animation */}
       {errorMessage && (

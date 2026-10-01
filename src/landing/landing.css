@@ -1,0 +1,44 @@
+/*
+ * Styles khusus halaman landing (KnowBase).
+ * Sengaja TIDAK meng-import tailwindcss agar runtime Tailwind tidak terduplikasi;
+ * utilitas kelas memakai build Tailwind utama aplikasi.
+ * Semua override di-scope ke .landing-root agar tidak bocor ke halaman aplikasi.
+ */
+
+.landing-root {
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark .landing-root {
+  background-color: #020617;
+  color: #f1f5f9;
+}
+
+.landing-root h1,
+.landing-root h2,
+.landing-root h3,
+.landing-root h4,
+.landing-root h5,
+.landing-root h6 {
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Smooth scroll hanya saat halaman landing terpasang */
+html:has(.landing-root) {
+  scroll-behavior: smooth;
+}
+
+/* Paksa latar sesuai mode selama landing aktif (mengalahkan bg-slate-50 global) */
+html:not(.dark):has(.landing-root) body {
+  background-color: #ffffff;
+}
+
+html.dark:has(.landing-root) body {
+  background-color: #020617;
+}

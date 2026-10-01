@@ -54,12 +54,13 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xl shadow-slate-200/60 dark:shadow-black/50 p-7 sm:p-9 transition-colors">
           {/* Card Header with Brand Icon */}
           <div className="text-center mb-6">
-            <Link to="/" className="inline-flex items-center justify-center gap-2.5 mb-3 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform">
-                KMS
+            <Link to="/" className="inline-flex items-center justify-center gap-2 mb-3 group focus:outline-none">
+              <div className="flex items-center gap-1">
+                <span className="w-2.5 h-5 rounded-full bg-blue-600 rotate-12 inline-block transform" />
+                <span className="w-2 h-4 rounded-full bg-blue-400 rotate-12 inline-block transform" />
               </div>
-              <span className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
-                KMS BUMD<span className="text-blue-600">.</span>
+              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
+                KNOWBASE
               </span>
             </Link>
             {title && (

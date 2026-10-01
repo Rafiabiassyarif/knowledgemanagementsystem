@@ -4,26 +4,20 @@ import {
   X, 
   User as UserIcon, 
   Mail, 
-  Building2, 
-  Shield, 
-  Briefcase, 
   Phone, 
   Key, 
   Lock, 
-  Calendar, 
   CheckCircle2, 
   AlertCircle,
   Laptop,
-  Check,
   Camera,
-  Trash2,
-  ShieldCheck
+  Trash2
 } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'profile' | 'security' | 'organization';
+  initialTab?: 'profile' | 'security';
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ 
@@ -31,12 +25,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onClose,
   initialTab = 'profile'
 }) => {
-  const { currentUser, currentOrganization, editUser } = useApp();
-  const role = currentUser?.role || 'user';
+  const { currentUser, editUser } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'organization'>(
-    role === 'superadmin' && initialTab === 'organization' ? 'profile' : initialTab
-  );
+  const [activeTab, setActiveTab] = useState<'profile' | 'security'>(initialTab);
 
   // Form states
   const [name, setName] = useState('');
@@ -54,6 +45,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [securitySuccess, setSecuritySuccess] = useState<string | null>(null);
   const [securityError, setSecurityError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // Sync state whenever currentUser or modal opens
   useEffect(() => {
@@ -67,12 +59,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     }
   }, [currentUser, isOpen]);
 
-  // Ensure superadmin never stays on organization tab
-  useEffect(() => {
-    if (role === 'superadmin' && activeTab === 'organization') {
-      setActiveTab('profile');
-    }
-  }, [role, activeTab]);
+
 
   if (!isOpen || !currentUser) return null;
 
@@ -80,14 +67,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setProfileError(null);
 
     if (!file.type.startsWith('image/')) {
-      alert('Mohon pilih file gambar (JPG, PNG, atau WebP)');
+      setProfileError('Mohon pilih file gambar (JPG, PNG, atau WebP)');
       return;
     }
 
     if (file.size > 3 * 1024 * 1024) {
-      alert('Ukuran foto maksimal 3MB');
+      setProfileError('Ukuran foto maksimal 3MB');
       return;
     }
 
@@ -164,13 +152,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md bg-blue-600">
-              {role === 'superadmin' ? (
-                <ShieldCheck className="w-5 h-5 text-white" />
-              ) : role === 'admin' ? (
-                <Shield className="w-5 h-5 text-white" />
-              ) : (
-                <UserIcon className="w-5 h-5 text-white" />
-              )}
+              <UserIcon className="w-5 h-5 text-white" />
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
@@ -215,21 +197,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <Lock className="w-4 h-4" />
             <span>Keamanan & Sandi</span>
           </button>
-
-          {/* Tab Organisasi & Akses HANYA untuk Admin dan User, tidak untuk Superadmin */}
-          {role !== 'superadmin' && (
-            <button
-              onClick={() => setActiveTab('organization')}
-              className={`py-3 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'organization'
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Organisasi & Akses</span>
-            </button>
-          )}
         </div>
 
         {/* Content Area */}
@@ -259,39 +226,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div className="min-w-0 flex-1 text-center sm:text-left">
                   <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{currentUser.name}</h3>
-                    
-                    {/* Role Pill Badge */}
-                    {role === 'superadmin' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60">
-                        <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                        Superadministrator Platform
-                      </span>
-                    ) : role === 'admin' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60">
-                        <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                        Administrator Organisasi
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                        <UserIcon className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-                        Pengguna / Anggota
-                      </span>
-                    )}
                   </div>
                   
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{currentUser.email}</p>
-
-                  {/* Organisasi (Hanya untuk Admin & User) */}
-                  {role !== 'superadmin' && (
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 flex items-center justify-center sm:justify-start gap-1.5 font-medium">
-                      <Building2 className="w-3.5 h-3.5 text-blue-500" />
-                      <span>
-                        {currentOrganization 
-                          ? currentOrganization.name 
-                          : 'Belum Bergabung dengan Organisasi'}
-                      </span>
-                    </p>
-                  )}
 
                   {/* Photo upload action buttons */}
                   <div className="mt-3 flex items-center justify-center sm:justify-start gap-2 flex-wrap">
@@ -325,6 +262,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
               </div>
 
+              {profileError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{profileError}</span>
+                </div>
+              )}
+
               {profileSuccess && (
                 <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -332,181 +276,56 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
               )}
 
-              {/* FORM PENGISIAN SESUAI PERAN */}
-              {role === 'superadmin' ? (
-                /* -------------------------------------------------------------
-                 * 1. FORM SUPERADMIN: Simpel, bersih, hanya data esensial
-                 * ------------------------------------------------------------- */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Nama Lengkap
-                    </label>
-                    <div className="relative">
-                      <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Email Akun
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      No. Telepon / WhatsApp
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        placeholder="0812-xxxx-xxxx"
-                      />
-                    </div>
+              {/* DATA PROFIL PENGGUNA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Nama Lengkap
+                  </label>
+                  <div className="relative">
+                    <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      required
+                    />
                   </div>
                 </div>
-              ) : role === 'admin' ? (
-                /* -------------------------------------------------------------
-                 * 2. FORM ADMIN: Data Administrator Organisasi
-                 * ------------------------------------------------------------- */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Nama Lengkap Administrator
-                    </label>
-                    <div className="relative">
-                      <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        required
-                      />
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Email Kantor / Resmi Organisasi
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      No. WhatsApp / Kontak PIC
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        placeholder="0821-xxxx-xxxx"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Organisasi yang Dikelola
-                    </label>
-                    <div className="flex items-center gap-2 px-3 py-2 text-xs bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 rounded-xl text-blue-700 dark:text-blue-300 font-semibold truncate">
-                      <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                      <span className="truncate">
-                        {currentOrganization 
-                          ? `${currentOrganization.name} (${currentOrganization.code})` 
-                          : 'Belum Membuat Organisasi'}
-                      </span>
-                    </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Email Akun
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      required
+                    />
                   </div>
                 </div>
-              ) : (
-                /* -------------------------------------------------------------
-                 * 3. FORM USER: Data Karyawan, Divisi & Jabatan
-                 * ------------------------------------------------------------- */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Nama Lengkap
-                    </label>
-                    <div className="relative">
-                      <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        required
-                      />
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Email Akun
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      No. WhatsApp / Telepon
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        placeholder="0813-xxxx-xxxx"
-                      />
-                    </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    No. Telepon / WhatsApp
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                      placeholder="0812-xxxx-xxxx"
+                    />
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
@@ -622,126 +441,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </span>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'organization' && role !== 'superadmin' && (
-            <div className="space-y-4">
-              {role === 'admin' ? (
-                <>
-                  <div className="p-4 bg-gradient-to-br from-blue-50/90 to-indigo-50/50 dark:from-blue-950/30 dark:to-indigo-950/20 rounded-2xl border border-blue-200/80 dark:border-blue-800/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-blue-700 dark:text-blue-300 font-semibold flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5" />
-                        Organisasi Dikelola
-                      </span>
-                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50">
-                        ADMINISTRATOR
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 pt-1">
-                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center shadow-md">
-                        {currentOrganization?.code?.slice(0, 3) || 'ADM'}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                          {currentOrganization ? currentOrganization.name : 'Organisasi Belum Dibuat'}
-                        </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Kode Akses: <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{currentOrganization?.code || 'SETUP'}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-blue-200/60 dark:border-blue-800/40 text-xs text-slate-600 dark:text-slate-400">
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500 text-[11px] block">Role Pengguna</span>
-                        <span className="font-bold text-blue-700 dark:text-blue-300">Administrator Organisasi</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500 text-[11px] block">Status Kepemilikan</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> {currentOrganization ? '1 Organisasi Aktif' : 'Perlu Buat Organisasi'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2">Hak Akses Administrator</h4>
-                    <div className="space-y-2">
-                      <div className="p-2.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
-                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span>Kelola Anggota, Setujui Permintaan Gabung, dan Atur Status User</span>
-                      </div>
-                      <div className="p-2.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
-                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span>Unggah Dokumen SOP & Regulasi Organisasi ke Repositori RAG</span>
-                      </div>
-                      <div className="p-2.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
-                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span>Tanya AI Cerdas Berbasis Dokumen Resmi Organisasi</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="p-4 bg-gradient-to-br from-emerald-50/90 to-slate-50 dark:from-emerald-950/30 dark:to-slate-900/50 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5" />
-                        Keanggotaan Organisasi
-                      </span>
-                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-                        {currentOrganization ? 'TERDAFTAR' : 'BELUM GABUNG'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 pt-1">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center justify-center shadow-md">
-                        {currentOrganization?.code?.slice(0, 3) || 'USR'}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                          {currentOrganization ? currentOrganization.name : 'Belum Bergabung dengan Organisasi'}
-                        </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Kode Akses: <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{currentOrganization?.code || '-'}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 text-xs text-slate-600 dark:text-slate-400">
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500 text-[11px] block">Role Pengguna</span>
-                        <span className="font-bold text-emerald-700 dark:text-emerald-300">Pengguna / Anggota</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500 text-[11px] block">Status Keanggotaan</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> {currentOrganization ? 'Aktif' : 'Menunggu Pilihan'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2">Hak Akses Anggota</h4>
-                    <div className="space-y-2">
-                      <div className="p-2.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span>Tanya AI Cerdas seputar Dokumen, SOP, dan Pengetahuan Organisasi</span>
-                      </div>
-                      <div className="p-2.5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span>Akses Arsip Dokumen Publik Organisasi</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           )}
         </div>

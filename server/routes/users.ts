@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { getPool } from '../db';
+import { requireRole } from '../middleware/auth';
 
 const router = Router();
 
@@ -49,8 +51,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 2. Add user to organization
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+// 2. Add user to organization (admin & superadmin only)
+router.post('/', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, organizationId, role = 'user' } = req.body;
     if (!name || !email) {
@@ -112,13 +114,36 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 3. Update user
+// 3. Update user (self, admin of the same organization, or superadmin)
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const actor = req.authUser!;
     const { name, email, role, organizationId, status } = req.body;
 
     const p = getPool();
+
+    const [targetRows] = await p.query<any[]>('SELECT id, role, organization_id FROM users WHERE id = ?', [id]);
+    if (targetRows.length === 0) {
+      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+    const target = targetRows[0];
+
+    const isSelf = actor.id === id;
+    const isSuperadmin = actor.role === 'superadmin';
+    const isSameOrgAdmin = actor.role === 'admin' && !!actor.organizationId && target.organization_id === actor.organizationId;
+
+    if (!isSelf && !isSuperadmin && !isSameOrgAdmin) {
+      res.status(403).json({ success: false, message: 'Anda tidak memiliki wewenang untuk memperbarui data pengguna ini.' });
+      return;
+    }
+
+    // Only superadmin may change role / status / organization assignment via this endpoint
+    const safeRole = isSuperadmin ? role : undefined;
+    const safeStatus = isSuperadmin ? status : undefined;
+    const safeOrganizationId = isSuperadmin ? organizationId : undefined;
+
     const initials = name ? name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : undefined;
 
     await p.query(`
@@ -130,7 +155,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
           status = COALESCE(?, status),
           avatar_initials = COALESCE(?, avatar_initials)
       WHERE id = ?
-    `, [name, email, role, organizationId, status, initials, id]);
+    `, [name, email, safeRole, safeOrganizationId, safeStatus, initials, id]);
 
     res.json({ success: true, message: 'Data anggota berhasil diperbarui.' });
   } catch (err: any) {
@@ -139,8 +164,8 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 4. Update user role (promote to admin or demote to user)
-router.patch('/:id/role', async (req: Request, res: Response): Promise<void> => {
+// 4. Update user role (promote to admin or demote to user) - superadmin only
+router.patch('/:id/role', requireRole('superadmin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { role } = req.body;
@@ -192,6 +217,204 @@ router.post('/:id/eject', async (req: Request, res: Response): Promise<void> => 
   } catch (err: any) {
     console.error('[EJECT USER ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal mengeluarkan anggota dari organisasi.' });
+  }
+});
+
+// 6. Update user account status (suspend / re-activate) - admin & superadmin only
+router.patch('/:id/status', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const actor = req.authUser!;
+    const { status } = req.body;
+
+    if (!['active', 'inactive'].includes(status)) {
+      res.status(400).json({ success: false, message: 'Status akun tidak valid.' });
+      return;
+    }
+
+    if (actor.id === id) {
+      res.status(400).json({ success: false, message: 'Anda tidak dapat mengubah status akun sendiri.' });
+      return;
+    }
+
+    const p = getPool();
+    const [rows] = await p.query<any[]>(`
+      SELECT u.id, u.name, u.role, u.organization_id, o.name as organization_name
+      FROM users u
+      LEFT JOIN organizations o ON u.organization_id = o.id
+      WHERE u.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+
+    const target = rows[0];
+
+    if (target.role === 'superadmin') {
+      res.status(403).json({ success: false, message: 'Akun Superadmin tidak dapat dinonaktifkan.' });
+      return;
+    }
+
+    if (actor.role === 'admin' && (!actor.organizationId || target.organization_id !== actor.organizationId)) {
+      res.status(403).json({ success: false, message: 'Anda hanya dapat mengelola akun anggota di organisasi Anda.' });
+      return;
+    }
+
+    await p.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
+
+    const isSuspend = status === 'inactive';
+
+    // Log activity
+    await p.query(`
+      INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'user')
+    `, [
+      `act-${Date.now()}`,
+      target.organization_id || null,
+      target.organization_name || null,
+      actor.name,
+      actor.role,
+      isSuspend ? 'Menonaktifkan Akun Anggota' : 'Mengaktifkan Kembali Akun Anggota',
+      target.name
+    ]);
+
+    res.json({
+      success: true,
+      status,
+      message: isSuspend
+        ? `Akun ${target.name} berhasil dinonaktifkan. Pengguna tidak dapat login hingga diaktifkan kembali.`
+        : `Akun ${target.name} berhasil diaktifkan kembali.`
+    });
+  } catch (err: any) {
+    console.error('[UPDATE USER STATUS ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengubah status akun pengguna.' });
+  }
+});
+
+// 7. Reset a member's password (admin & superadmin only, old password not required)
+router.patch('/:id/reset-password', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const actor = req.authUser!;
+    const { newPassword } = req.body;
+
+    if (!newPassword || String(newPassword).length < 6) {
+      res.status(400).json({ success: false, message: 'Kata sandi baru minimal 6 karakter.' });
+      return;
+    }
+
+    if (actor.id === id) {
+      res.status(400).json({ success: false, message: 'Gunakan menu profil untuk mengubah kata sandi akun sendiri.' });
+      return;
+    }
+
+    const p = getPool();
+    const [rows] = await p.query<any[]>(`
+      SELECT u.id, u.name, u.role, u.organization_id, o.name as organization_name
+      FROM users u
+      LEFT JOIN organizations o ON u.organization_id = o.id
+      WHERE u.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+
+    const target = rows[0];
+
+    if (target.role === 'superadmin') {
+      res.status(403).json({ success: false, message: 'Kata sandi akun Superadmin tidak dapat direset dari sini.' });
+      return;
+    }
+
+    if (actor.role === 'admin' && (!actor.organizationId || target.organization_id !== actor.organizationId)) {
+      res.status(403).json({ success: false, message: 'Anda hanya dapat mengelola akun anggota di organisasi Anda.' });
+      return;
+    }
+
+    const newHash = await bcrypt.hash(String(newPassword), 10);
+    await p.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, id]);
+
+    // Log activity
+    await p.query(`
+      INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+      VALUES (?, ?, ?, ?, ?, 'Reset Kata Sandi Anggota', ?, 'user')
+    `, [
+      `act-${Date.now()}`,
+      target.organization_id || null,
+      target.organization_name || null,
+      actor.name,
+      actor.role,
+      target.name
+    ]);
+
+    res.json({ success: true, message: `Kata sandi ${target.name} berhasil direset. Sampaikan kata sandi baru kepada yang bersangkutan.` });
+  } catch (err: any) {
+    console.error('[RESET PASSWORD ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mereset kata sandi pengguna.' });
+  }
+});
+
+// 8. Delete a user account permanently - admin & superadmin only
+router.delete('/:id', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const actor = req.authUser!;
+
+    if (actor.id === id) {
+      res.status(400).json({ success: false, message: 'Anda tidak dapat menghapus akun sendiri.' });
+      return;
+    }
+
+    const p = getPool();
+    const [rows] = await p.query<any[]>(`
+      SELECT u.id, u.name, u.role, u.organization_id, o.name as organization_name
+      FROM users u
+      LEFT JOIN organizations o ON u.organization_id = o.id
+      WHERE u.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+
+    const target = rows[0];
+
+    if (target.role === 'superadmin') {
+      res.status(403).json({ success: false, message: 'Akun Superadmin tidak dapat dihapus.' });
+      return;
+    }
+
+    if (actor.role === 'admin' && (!actor.organizationId || target.organization_id !== actor.organizationId)) {
+      res.status(403).json({ success: false, message: 'Anda hanya dapat mengelola akun anggota di organisasi Anda.' });
+      return;
+    }
+
+    // Clean up related rows first (no FK constraints to users, keep data consistent)
+    await p.query('DELETE FROM join_requests WHERE user_id = ?', [id]);
+    await p.query('DELETE FROM users WHERE id = ?', [id]);
+
+    // Log activity
+    await p.query(`
+      INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+      VALUES (?, ?, ?, ?, ?, 'Menghapus Akun Anggota', ?, 'user')
+    `, [
+      `act-${Date.now()}`,
+      target.organization_id || null,
+      target.organization_name || null,
+      actor.name,
+      actor.role,
+      target.name
+    ]);
+
+    res.json({ success: true, message: `Akun ${target.name} beserta data terkaitnya berhasil dihapus permanen.` });
+  } catch (err: any) {
+    console.error('[DELETE USER ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal menghapus akun pengguna.' });
   }
 });
 

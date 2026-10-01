@@ -42,29 +42,31 @@ export const RegisterPage: React.FC = () => {
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const res = registerUser({
-        name,
-        email,
-        password,
-        department: 'Umum'
-      });
+    (async () => {
+      try {
+        const res = await registerUser({
+          name,
+          email,
+          password,
+          department: 'Umum'
+        });
 
-      setIsLoading(false);
+        if (!res.success) {
+          setErrorMessage(res.message);
+          return;
+        }
 
-      if (!res.success) {
-        setErrorMessage(res.message);
-        return;
+        navigate(res.requiresOrgJoin ? '/app/join-org' : '/app');
+      } finally {
+        setIsLoading(false);
       }
-
-      navigate('/app/join-org');
-    }, 400);
+    })();
   };
 
   return (
     <AuthLayout
       title="Buat Akun Baru"
-      subtitle="Daftar akun untuk mengakses KMS BUMD dan berinteraksi dengan Tanya AI"
+      subtitle="Daftar akun untuk mengunggah dokumen, berkas &amp; foto repositori RAG"
     >
       {/* Error Alert with shake animation */}
       {errorMessage && (

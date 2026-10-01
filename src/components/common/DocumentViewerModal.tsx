@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { downloadProtectedFile } from '../../services/api';
 import { BottomSheet } from './BottomSheet';
 import { 
   FileText, 
@@ -25,7 +26,7 @@ export const DocumentViewerModal: React.FC = () => {
       isOpen={!!selectedDocForViewer}
       onClose={() => setSelectedDocForViewer(null)}
       title={doc.title}
-      subtitle={`${doc.organizationName} · ${doc.category} · Versi ${doc.version}`}
+      subtitle={`${doc.organizationName} · ${doc.category} · ${doc.repositoryType === 'knowledge' ? '💡 Repositori Knowledge' : '📁 Repositori Dokumen'}`}
     >
       <div className="space-y-6">
         {/* Document Metadata Bar */}
@@ -43,10 +44,10 @@ export const DocumentViewerModal: React.FC = () => {
             <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-0.5 truncate">{doc.department}</p>
           </div>
           <div>
-            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">RAG Status</span>
-            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Penyimpanan</span>
+            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-center gap-1 font-mono">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Indexed ({doc.chunksCount} chunks)
+              Kroombox CDN
             </p>
           </div>
         </div>
@@ -76,23 +77,6 @@ export const DocumentViewerModal: React.FC = () => {
           </div>
         </div>
 
-        {/* RAG AI Indexing Status */}
-        <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/40 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600/10 dark:bg-blue-400/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-900 dark:text-white">Status Indeks AI (RAG)</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Dokumen telah diproses otomatis oleh RAG engine dan siap untuk tanya jawab.</p>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            Terindeks Otomatis
-          </span>
-        </div>
-
         {/* Footer Actions */}
         <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div className="text-[11px] text-slate-400 dark:text-slate-500">
@@ -101,7 +85,11 @@ export const DocumentViewerModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                alert(`Simulasi: Mengunduh ${doc.title} (${doc.fileType})`);
+                const targetUrl = (doc.fileUrl && !doc.fileUrl.startsWith('db://'))
+                  ? doc.fileUrl
+                  : `/api/documents/${doc.id}/download`;
+                downloadProtectedFile(targetUrl, `${doc.title}.${(doc.fileType || 'PDF').toLowerCase()}`)
+                  .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >

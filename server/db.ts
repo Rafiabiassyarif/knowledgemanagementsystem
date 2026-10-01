@@ -1,8 +1,12 @@
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config();
+
+// Default password for seeded demo accounts (hash generated at startup)
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'password123';
 
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
 const DB_PORT = Number(process.env.DB_PORT) || 3306;
@@ -102,7 +106,7 @@ async function createTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 
-  // 3. Documents
+  // 3. Documents (file binary stored as LONGBLOB — no filesystem storage)
   await p.query(`
     CREATE TABLE IF NOT EXISTS documents (
       id VARCHAR(64) PRIMARY KEY,
@@ -112,6 +116,8 @@ async function createTables() {
       file_type VARCHAR(20) NOT NULL,
       file_size_kb INT DEFAULT 0,
       file_url TEXT NULL,
+      file_name VARCHAR(255) NULL,
+      file_data LONGBLOB NULL,
       year INT DEFAULT 2024,
       department VARCHAR(255) NULL,
       summary TEXT NULL,
@@ -124,6 +130,46 @@ async function createTables() {
         REFERENCES organizations(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  // Lightweight column migration for existing installations
+  const [docCols] = await p.query<any[]>(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS 
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'documents'`,
+    [DB_NAME]
+  );
+  const existingDocCols = new Set((docCols as any[]).map(c => c.COLUMN_NAME));
+  if (!existingDocCols.has('file_data')) {
+    await p.query('ALTER TABLE documents ADD COLUMN file_data LONGBLOB NULL AFTER file_url');
+    console.log('[DB] Kolom file_data (LONGBLOB) ditambahkan ke tabel documents.');
+  }
+  if (!existingDocCols.has('file_name')) {
+    await p.query('ALTER TABLE documents ADD COLUMN file_name VARCHAR(255) NULL AFTER file_data');
+    console.log('[DB] Kolom file_name ditambahkan ke tabel documents.');
+  }
+  if (!existingDocCols.has('repository_type')) {
+    await p.query("ALTER TABLE documents ADD COLUMN repository_type VARCHAR(50) DEFAULT 'document' AFTER category");
+    console.log('[DB] Kolom repository_type ditambahkan ke tabel documents.');
+  }
+  if (!existingDocCols.has('cdn_file_id')) {
+    await p.query('ALTER TABLE documents ADD COLUMN cdn_file_id VARCHAR(100) NULL AFTER file_url');
+    console.log('[DB] Kolom cdn_file_id ditambahkan ke tabel documents.');
+  }
+
+  // Users quota & subscription plan migration
+  const [userCols] = await p.query<any[]>(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS 
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'`,
+    [DB_NAME]
+  );
+  const existingUserCols = new Set((userCols as any[]).map(c => c.COLUMN_NAME));
+  if (!existingUserCols.has('doc_quota')) {
+    await p.query('ALTER TABLE users ADD COLUMN doc_quota INT DEFAULT 5 AFTER status');
+    console.log('[DB] Kolom doc_quota ditambahkan ke tabel users.');
+  }
+  if (!existingUserCols.has('plan')) {
+    await p.query("ALTER TABLE users ADD COLUMN plan VARCHAR(50) DEFAULT 'free' AFTER doc_quota");
+    console.log('[DB] Kolom plan ditambahkan ke tabel users.');
+  }
 
   // 4. Activity Logs
   await p.query(`
@@ -145,9 +191,12 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS join_requests (
       id VARCHAR(64) PRIMARY KEY,
       organization_id VARCHAR(64) NOT NULL,
+      organization_code VARCHAR(64) NULL,
+      organization_name VARCHAR(255) NULL,
       user_id VARCHAR(64) NOT NULL,
       applicant_name VARCHAR(255) NOT NULL,
       applicant_email VARCHAR(255) NOT NULL,
+      department VARCHAR(255) NULL,
       reason TEXT NULL,
       status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -155,64 +204,65 @@ async function createTables() {
         REFERENCES organizations(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  // Lightweight column migration for existing installations
+  const [jrCols] = await p.query<any[]>(
+    `SELECT COUNT(*) as cnt FROM information_schema.COLUMNS 
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'join_requests' AND COLUMN_NAME = 'organization_code'`,
+    [DB_NAME]
+  );
+  if (jrCols[0].cnt === 0) {
+    await p.query(`ALTER TABLE join_requests 
+      ADD COLUMN organization_code VARCHAR(64) NULL AFTER organization_id,
+      ADD COLUMN organization_name VARCHAR(255) NULL AFTER organization_code,
+      ADD COLUMN department VARCHAR(255) NULL AFTER applicant_email`);
+  }
 }
 
 async function seedInitialData() {
   const p = getPool();
 
-  // Check if organizations exist
-  const [orgRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM organizations');
-  if (orgRows[0].cnt === 0) {
-    console.log('[DB] Seeding default organizations...');
-    await p.query(`
-      INSERT INTO organizations (id, name, code, type, sector, province, city, address, phone, email, website, description, admin_name, status)
-      VALUES 
-      ('org-pdam-bogor', 'Perumdam Tirta Kahuripan', 'TRT-KHR-01', 'BUMD Air Minum', 'Pengelolaan Air Minum Daerah', 'Jawa Barat', 'Kabupaten Bogor', 'Jl. Raya Tegar Beriman No. 1 Cibinong', '021-8752233', 'humas@tirtakahuripan.co.id', 'https://tirtakahuripan.co.id', 'BUMD pengelola penyediaan air minum perpipaan untuk masyarakat Kabupaten Bogor dengan cakupan 31 cabang pelayanan.', 'Andi Pratama', 'active'),
-      ('org-bank-bjb', 'Bank BJB (BPD Jabar Banten)', 'BJB-CORP-02', 'BUMD Perbankan', 'Jasa Keuangan & Perbankan Daerah', 'Jawa Barat', 'Kota Bandung', 'Menara Bank BJB Jl. Naripan No. 12-14 Bandung', '022-4234868', 'corsec@bankbjb.co.id', 'https://bankbjb.co.id', 'BUMD sektor perbankan terdepan mitra pertumbuhan ekonomi daerah Jawa Barat dan Banten.', 'Rina Suryani', 'active'),
-      ('org-pasar-jaya', 'Perumda Pasar Jaya', 'PSR-JYA-03', 'BUMD Pangan & Pasar', 'Pengelolaan Pasar Rakyat & Logistik', 'DKI Jakarta', 'Jakarta Pusat', 'Jl. Cikini Raya No. 90 Menteng Jakarta Pusat', '021-3141234', 'info@pasarjaya.co.id', 'https://pasarjaya.co.id', 'BUMD pangan dan pengelolaan 153 pasar tradisional serta pusat distribusi sembako rakyat di DKI Jakarta.', 'Bambang Irawan', 'active');
-    `);
+  // Find first active organization if available to bind users
+  const [orgRows] = await p.query<any[]>('SELECT id FROM organizations LIMIT 1');
+  const defaultOrgId = orgRows.length > 0 ? orgRows[0].id : null;
+
+  // 1. Ensure Superadmin account always exists
+  const [superadminRows] = await p.query<any[]>('SELECT id FROM users WHERE role = ? OR email = ?', ['superadmin', 'superadmin@kms.id']);
+  const demoHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  if (superadminRows.length === 0) {
+    console.log('[DB] Creating master Superadmin account (superadmin@kms.id)...');
+    await p.query(
+      `INSERT INTO users (id, name, email, password_hash, role, organization_id, status, avatar_initials, phone, org_join_status, plan, doc_quota)
+       VALUES ('usr-superadmin', 'Dr. Hendra Gunawan', 'superadmin@kms.id', ?, 'superadmin', NULL, 'active', 'HG', '0811-9988-7766', 'joined', 'enterprise', 9999)`,
+      [demoHash]
+    );
+  } else {
+    await p.query('UPDATE users SET password_hash = ?, organization_id = NULL, status = "active" WHERE email = "superadmin@kms.id"', [demoHash]);
   }
 
-  // Check if users exist
-  const [userRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM users');
-  if (userRows[0].cnt === 0) {
-    console.log('[DB] Seeding default users...');
-    await p.query(`
-      INSERT INTO users (id, name, email, role, organization_id, status, avatar_initials, phone, org_join_status)
-      VALUES
-      ('usr-superadmin', 'Dr. Hendra Gunawan', 'superadmin@kms.id', 'superadmin', NULL, 'active', 'HG', '0811-9988-7766', 'joined'),
-      ('usr-andi-admin', 'Andi Pratama', 'admin@bumd.go.id', 'admin', 'org-pdam-bogor', 'active', 'AP', '0812-3456-7890', 'joined'),
-      ('usr-rina-admin', 'Rina Suryani', 'admin.bjb@bumd.go.id', 'admin', 'org-bank-bjb', 'active', 'RS', '0813-2233-4455', 'joined'),
-      ('usr-bambang-admin', 'Bambang Irawan', 'admin.pasarjaya@bumd.go.id', 'admin', 'org-pasar-jaya', 'active', 'BI', '0812-7788-9900', 'joined'),
-      ('usr-budi-staff', 'Budi Santoso', 'budi@bumd.go.id', 'user', 'org-pdam-bogor', 'active', 'BS', '0857-1122-3344', 'joined'),
-      ('usr-ratna-staff', 'Ratna Wulandari', 'ratna@bumd.go.id', 'user', 'org-pdam-bogor', 'active', 'RW', '0819-5566-7788', 'joined');
-    `);
+  // 2. Ensure Admin Dummy account exists (admin@kms.id / password123)
+  const [adminRows] = await p.query<any[]>('SELECT id FROM users WHERE email = ?', ['admin@kms.id']);
+  if (adminRows.length === 0) {
+    console.log('[DB] Creating dummy Admin account (admin@kms.id)...');
+    await p.query(
+      `INSERT INTO users (id, name, email, password_hash, role, organization_id, status, avatar_initials, phone, org_join_status, plan, doc_quota)
+       VALUES ('usr-admin-demo', 'Administrator BUMD', 'admin@kms.id', ?, 'admin', ?, 'active', 'AD', '0812-3456-7890', 'joined', 'enterprise', 999)`,
+      [demoHash, defaultOrgId]
+    );
+  } else {
+    await p.query('UPDATE users SET password_hash = ?, role = "admin", status = "active", plan = "enterprise", doc_quota = 999 WHERE email = "admin@kms.id"', [demoHash]);
   }
 
-  // Check if documents exist
-  const [docRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM documents');
-  if (docRows[0].cnt === 0) {
-    console.log('[DB] Seeding default documents...');
-    await p.query(`
-      INSERT INTO documents (id, organization_id, title, category, file_type, file_size_kb, year, department, summary, tags, notes, uploaded_by, uploaded_by_id)
-      VALUES
-      ('doc-pdam-01', 'org-pdam-bogor', 'SOP Tanggap Darurat Kebocoran Pipa Transmisi Utama', 'SOP & Prosedur', 'PDF', 3420, 2024, 'Distribusi & Pemeliharaan Jaringan', 'Standar operasional penanganan kebocoran pipa berdiameter >300mm dengan batas respon maksimal 60 menit.', '["kebocoran", "pipa", "tanggap-darurat", "sop"]', 'Dokumen pedoman teknis lapangan.', 'Andi Pratama', 'usr-andi-admin'),
-      ('doc-pdam-02', 'org-pdam-bogor', 'Pedoman Pengujian Kualitas Air Bersih Permenkes 2/2023', 'Pedoman Teknis', 'PDF', 5120, 2023, 'Laboratorium & Kontrol Kualitas Air', 'Prosedur baku pengujian 19 parameter wajib kimia, mikrobiologi, dan fisika air minum perpipaan.', '["kualitas-air", "permenkes", "laboratorium", "parameter"]', 'Wajib dipatuhi seluruh cabang instalasi pengolahan air.', 'Andi Pratama', 'usr-andi-admin'),
-      ('doc-bjb-01', 'org-bank-bjb', 'Pedoman Standar Penilaian Kelayakan Kredit UMKM BJB Mesra', 'Pedoman Teknis', 'PDF', 4200, 2024, 'Divisi Kredit Komersial & UMKM', 'Mekanisme penilaian scoring kelayakan kredit kelompok bjb Mesra tanpa jaminan bagi usaha ultra mikro binaan rumah ibadah.', '["kredit", "umkm", "bjb-mesra", "scoring"]', 'Pedoman rujukan analis kredit.', 'Rina Suryani', 'usr-rina-admin'),
-      ('doc-pasar-01', 'org-pasar-jaya', 'Master Plan Revitalisasi Pasar Tradisional Menuju Pasar Sehat SNI', 'Master Plan & Renstra', 'PDF', 14200, 2024, 'Perencanaan Fasilitas Pasar', 'Peta jalan modernisasi 24 pasar tradisional menjadi pasar rakyat higienis berstandar SNI 8152:2021.', '["revitalisasi", "pasar-rakyat", "sni", "higienis"]', 'Rencana strategis 2024-2029.', 'Bambang Irawan', 'usr-bambang-admin');
-    `);
-  }
-
-  // Check if activity logs exist
-  const [logRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM activity_logs');
-  if (logRows[0].cnt === 0) {
-    console.log('[DB] Seeding initial activity logs...');
-    await p.query(`
-      INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
-      VALUES
-      ('act-init-1', 'org-pdam-bogor', 'Perumdam Tirta Kahuripan', 'Andi Pratama', 'admin', 'Upload Dokumen Baru', 'SOP Tanggap Darurat Kebocoran Pipa Transmisi Utama', 'document'),
-      ('act-init-2', 'org-bank-bjb', 'Bank BJB', 'Rina Suryani', 'admin', 'Upload Dokumen Baru', 'Pedoman Standar Penilaian Kelayakan Kredit UMKM BJB Mesra', 'document'),
-      ('act-init-3', NULL, 'KMS Global', 'Dr. Hendra Gunawan', 'superadmin', 'Inisialisasi Sistem KMS BUMD', 'Platform Production Ready', 'security');
-    `);
+  // 3. Ensure User Dummy account exists (user@kms.id / password123)
+  const [userRows] = await p.query<any[]>('SELECT id FROM users WHERE email = ?', ['user@kms.id']);
+  if (userRows.length === 0) {
+    console.log('[DB] Creating dummy User account (user@kms.id)...');
+    await p.query(
+      `INSERT INTO users (id, name, email, password_hash, role, organization_id, status, avatar_initials, phone, org_join_status, plan, doc_quota)
+       VALUES ('usr-user-demo', 'User Portal Demo', 'user@kms.id', ?, 'user', ?, 'active', 'UD', '0813-8877-6655', 'joined', 'free', 5)`,
+      [demoHash, defaultOrgId]
+    );
+  } else {
+    await p.query('UPDATE users SET password_hash = ?, role = "user", status = "active" WHERE email = "user@kms.id"', [demoHash]);
   }
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, Cpu, Sparkles, Menu, MessageSquare, Building2 } from 'lucide-react';
+import { LayoutDashboard, FileText, FolderKanban, HardDrive, Menu } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface MobileNavProps {
@@ -8,41 +8,27 @@ interface MobileNavProps {
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
-  const { currentUser, currentOrganization } = useApp();
+  const { currentUser } = useApp();
   const location = useLocation();
 
   const getItems = () => {
-    if (currentUser?.role === 'user') {
+    if (currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
       return [
-        { to: '/app/chat', label: 'Tanya AI', icon: Sparkles },
-        { to: '/app/join-org', label: currentOrganization ? 'Organisasi' : 'Gabung', icon: Building2 },
-      ];
-    }
-
-    if (currentUser?.role === 'admin' && !currentOrganization) {
-      // Admin belum buat organisasi: hanya menu Buat Org
-      return [
-        { to: '/app', label: 'Buat Org', icon: Building2 },
+        { to: '/app', label: 'Overview', icon: LayoutDashboard },
+        { to: '/app/documents', label: 'Dokumen', icon: FileText },
+        { to: '/app/cdn', label: 'CDN & RAG', icon: HardDrive },
+        { to: '/app/projects', label: 'Project', icon: FolderKanban },
       ];
     }
 
     return [
       { to: '/app', label: 'Overview', icon: LayoutDashboard },
-      { to: '/app/chat', label: 'Tanya AI', icon: Sparkles },
       { to: '/app/documents', label: 'Dokumen', icon: FileText },
-      { to: '/app/users', label: 'Anggota', icon: Cpu },
+      { to: '/app/projects', label: 'Project', icon: FolderKanban },
     ];
   };
 
   const isLinkActive = (to: string) => {
-    if (currentUser?.role === 'user') {
-      if (to === '/app/chat') {
-        return location.pathname === '/app/chat' || (location.pathname === '/app' && Boolean(currentOrganization));
-      }
-      if (to === '/app/join-org') {
-        return location.pathname === '/app/join-org' || (location.pathname === '/app' && !currentOrganization);
-      }
-    }
     if (to === '/app') {
       return location.pathname === '/app';
     }

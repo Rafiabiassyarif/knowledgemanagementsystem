@@ -1,37 +1,23 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
+import { uploadToKroomboxCDN, deleteFromKroomboxCDN, createCDNSignedUrl, listKroomboxCDNFiles } from '../services/cdn';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-// Configure multer storage for uploaded documents
-const uploadDir = path.resolve('uploads/documents');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `doc-${uniqueSuffix}${ext}`);
-  }
-});
-
+// Files are stored INSIDE MySQL (LONGBLOB), never on the filesystem.
+// Multer memory storage keeps the binary in RAM so we can insert it into the DB.
 const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size (fits LONGBLOB)
 });
 
-// 1. Get documents (with optional organizationId filter)
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+// 1. Get documents (with optional organizationId and repositoryType filter)
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { organizationId, category, search } = req.query;
+    const { organizationId, category, search, repositoryType } = req.query;
     const p = getPool();
 
     let query = `
@@ -50,6 +36,11 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     if (category && category !== 'all') {
       conditions.push('d.category = ?');
       params.push(category);
+    }
+
+    if (repositoryType && repositoryType !== 'all') {
+      conditions.push('d.repository_type = ?');
+      params.push(repositoryType);
     }
 
     if (search) {
@@ -71,12 +62,14 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       organizationName: r.organization_name,
       title: r.title,
       category: r.category,
+      repositoryType: r.repository_type || 'document',
       fileType: r.file_type,
       fileSizeKb: r.file_size_kb,
-      fileUrl: r.file_url,
+      fileUrl: (r.file_url && !r.file_url.startsWith('db://')) ? r.file_url : (r.cdn_file_id ? `https://api-cdn.kroombox.com/api/bridge/view/${r.cdn_file_id}` : `/api/documents/${r.id}/download`),
+      cdnFileId: r.cdn_file_id || null,
       year: r.year,
       department: r.department || 'Umum',
-      summary: r.summary || 'Dokumen resmi terindeks otomatis.',
+      summary: r.summary || 'Dokumen resmi terindeks otomatis di CDN.',
       tags: typeof r.tags === 'string' ? JSON.parse(r.tags) : (r.tags || []),
       notes: r.notes,
       uploadedBy: r.uploaded_by,
@@ -86,6 +79,43 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       ragStatus: 'indexed'
     }));
 
+    // Merge any assets stored directly on Kroombox Edge CDN
+    try {
+      const cdnFiles = await listKroomboxCDNFiles();
+      if (Array.isArray(cdnFiles) && cdnFiles.length > 0) {
+        for (const cf of cdnFiles) {
+          const exists = documents.some(d => d.cdnFileId === cf.id || (cf.name && d.title.toLowerCase() === cf.name.toLowerCase().replace(/\.[^/.]+$/, "")));
+          if (!exists) {
+            const isImg = (cf.mime_type || '').startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp'].some(ext => cf.name.toLowerCase().endsWith(ext));
+            documents.push({
+              id: `cdn-${cf.id}`,
+              organizationId: (organizationId && organizationId !== 'all') ? (organizationId as string) : 'all',
+              organizationName: 'Kroombox Edge CDN',
+              title: cf.name.replace(/\.[^/.]+$/, ""),
+              category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital CDN',
+              repositoryType: isImg ? 'photo' : 'document',
+              fileType: cf.name.split('.').pop()?.toUpperCase() || (isImg ? 'JPG' : 'TXT'),
+              fileSizeKb: Math.round((cf.size || 1024) / 1024) || 1,
+              fileUrl: cf.url || `https://api-cdn.kroombox.com/api/bridge/view/${cf.id}`,
+              cdnFileId: cf.id,
+              year: new Date().getFullYear(),
+              department: 'Media & Aset CDN',
+              summary: `Berkas resmi tersimpan langsung di Kroombox Edge CDN (${cf.name})`,
+              tags: ['cdn', isImg ? 'photo' : 'document', 'kroombox'],
+              notes: 'Tersimpan di Edge CDN',
+              uploadedBy: 'CDN Storage',
+              uploadedAt: cf.created_at || new Date().toISOString(),
+              chunksCount: 1,
+              totalTokens: 100,
+              ragStatus: 'indexed'
+            });
+          }
+        }
+      }
+    } catch (cdnErr) {
+      console.warn('[CDN FETCH FOR DOCS WARN]', cdnErr);
+    }
+
     res.json({ success: true, documents });
   } catch (err: any) {
     console.error('[GET DOCS ERROR]', err);
@@ -93,8 +123,67 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// 1b. Check User Quota & Plan Info
+router.get('/quota/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const p = getPool();
+    const [userRows] = await p.query<any[]>('SELECT id, name, role, doc_quota, plan FROM users WHERE id = ?', [userId]);
+    if (userRows.length === 0) {
+      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+    const u = userRows[0];
+    const isUnlimited = u.role === 'superadmin' || u.role === 'admin' || u.plan === 'enterprise';
+    const [countRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM documents WHERE uploaded_by_id = ?', [userId]);
+    const currentCount = countRows[0].cnt || 0;
+    const maxQuota = isUnlimited ? 999999 : (u.doc_quota || 5);
+
+    res.json({
+      success: true,
+      quota: {
+        userId: u.id,
+        role: u.role,
+        plan: u.plan || 'free',
+        isUnlimited,
+        used: currentCount,
+        max: maxQuota,
+        remaining: isUnlimited ? 999999 : Math.max(0, maxQuota - currentCount)
+      }
+    });
+  } catch (err: any) {
+    console.error('[GET QUOTA ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengecek kuota dokumen.' });
+  }
+});
+
+// 1c. Upgrade / Purchase Plan
+router.post('/upgrade-plan', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, plan } = req.body;
+    const p = getPool();
+    const quotaMap: Record<string, number> = {
+      free: 5,
+      pro: 100,
+      enterprise: 999999
+    };
+    const newQuota = quotaMap[plan] || 5;
+    await p.query('UPDATE users SET plan = ?, doc_quota = ? WHERE id = ?', [plan, newQuota, userId]);
+
+    res.json({
+      success: true,
+      message: `Paket berhasil ditingkatkan ke "${plan.toUpperCase()}". Kuota dokumen Anda sekarang: ${newQuota >= 999999 ? 'Tanpa Batas' : newQuota + ' dokumen'}.`,
+      plan,
+      docQuota: newQuota
+    });
+  } catch (err: any) {
+    console.error('[UPGRADE PLAN ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal upgrade paket.' });
+  }
+});
+
 // 2. Get single document
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();
@@ -120,7 +209,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       category: r.category,
       fileType: r.file_type,
       fileSizeKb: r.file_size_kb,
-      fileUrl: r.file_url,
+      fileUrl: (r.file_url && !r.file_url.startsWith('db://')) ? r.file_url : `/api/documents/${r.id}/download`,
       year: r.year,
       department: r.department,
       summary: r.summary,
@@ -139,11 +228,12 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // 3. Upload document
-router.post('/upload', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+router.post('/upload', requireAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       title,
       category,
+      repositoryType = 'document',
       year,
       notes,
       organizationId,
@@ -158,42 +248,95 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 
     const p = getPool();
 
-    // Verify organization exists
-    const [orgRows] = await p.query<any[]>('SELECT name FROM organizations WHERE id = ?', [organizationId]);
+    // Project workspace unlimited upload support
+    // (User can upload multiple files & documents to their project)
+
+    // Verify organization exists, or fallback gracefully
+    let targetOrgId = organizationId;
+    let [orgRows] = await p.query<any[]>('SELECT id, name FROM organizations WHERE id = ?', [organizationId]);
     if (orgRows.length === 0) {
-      res.status(404).json({ success: false, message: 'Organisasi tujuan tidak ditemukan.' });
-      return;
+      const [firstOrg] = await p.query<any[]>('SELECT id, name FROM organizations LIMIT 1');
+      if (firstOrg.length > 0) {
+        targetOrgId = firstOrg[0].id;
+        orgRows = firstOrg;
+      } else {
+        res.status(404).json({ success: false, message: 'Organisasi tujuan tidak ditemukan.' });
+        return;
+      }
     }
     const orgName = orgRows[0].name;
 
     const file = req.file;
-    const fileType = file ? path.extname(file.originalname).replace('.', '').toUpperCase() : 'PDF';
+    const docId: string = req.body.id || `doc-${Date.now()}`;
+    const rawExt = file && file.originalname.includes('.')
+      ? file.originalname.slice(file.originalname.lastIndexOf('.') + 1)
+      : '';
+    const fileType = (rawExt || 'PDF').toUpperCase();
     const fileSizeKb = file ? Math.round(file.size / 1024) : 2500;
-    const fileUrl = file ? `/uploads/documents/${file.filename}` : null;
-    const docId = `doc-${Date.now()}`;
+    const fileName: string | null = file ? file.originalname : null;
+    // CRITICAL: All documents, files, and photos are stored strictly in Kroombox Edge CDN.
+    // MySQL ONLY stores metadata (user, admin, and organization references).
+    // NO physical binary data (LONGBLOB) is stored in MySQL.
+    let cdnFileId: string | null = null;
+    let fileUrl: string = `/api/documents/${docId}/download`;
+
+    if (file && file.buffer) {
+      try {
+        const cdnResult = await uploadToKroomboxCDN(file.buffer, file.originalname, file.mimetype || 'application/octet-stream');
+        if (cdnResult && cdnResult.url) {
+          cdnFileId = cdnResult.fileId;
+          fileUrl = cdnResult.url;
+          console.log(`[KROOMBOX CDN] Berkas "${file.originalname}" sukses diunggah ke CDN: ${fileUrl}`);
+        }
+      } catch (cdnErr: any) {
+        console.error('[CDN UPLOAD FAILED]', cdnErr?.message || cdnErr);
+        res.status(502).json({
+          success: false,
+          message: `Gagal mengunggah berkas ke Kroombox Edge CDN: ${cdnErr?.message || 'CDN Error'}. MySQL tidak menyimpan berkas fisik.`
+        });
+        return;
+      }
+    }
 
     // Auto generate default tags and summary for mock/RAG placeholder
     const generatedTags = JSON.stringify([
       category.toLowerCase().replace(/\s+/g, '-'),
+      repositoryType,
       'bumd',
       'internal',
       fileType.toLowerCase()
     ]);
     const summary = notes && notes.trim()
       ? notes.trim()
-      : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI.`;
+      : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI via CDN.`;
 
     await p.query(`
-      INSERT INTO documents (id, organization_id, title, category, file_type, file_size_kb, file_url, year, summary, tags, notes, uploaded_by, uploaded_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, file_data, year, summary, tags, notes, uploaded_by, uploaded_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        title = VALUES(title),
+        category = VALUES(category),
+        repository_type = VALUES(repository_type),
+        file_type = VALUES(file_type),
+        file_size_kb = VALUES(file_size_kb),
+        file_url = VALUES(file_url),
+        cdn_file_id = VALUES(cdn_file_id),
+        file_name = VALUES(file_name),
+        file_data = NULL,
+        year = VALUES(year),
+        summary = VALUES(summary),
+        notes = VALUES(notes)
     `, [
       docId,
-      organizationId,
+      targetOrgId,
       title.trim(),
       category,
+      repositoryType,
       fileType,
       fileSizeKb,
       fileUrl,
+      cdnFileId,
+      fileName,
       Number(year) || new Date().getFullYear(),
       summary,
       generatedTags,
@@ -214,15 +357,34 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
       title.trim()
     ]);
 
+    // Asynchronously index document to RAG Multi-Tenant Service
+    const docDisplayName = file ? file.originalname : `${title.trim()}.${(fileType || 'pdf').toLowerCase()}`;
+    indexDocumentToRag({
+      documentId: docId,
+      organizationId: targetOrgId,
+      documentName: docDisplayName,
+      contentBuffer: file ? file.buffer : null,
+      text: summary,
+      metadata: {
+        category,
+        year: Number(year) || new Date().getFullYear(),
+        uploadedBy: uploadedBy || 'Admin'
+      }
+    }).catch(ragErr => {
+      console.warn('[RAG AUTO-INDEX WARN]', ragErr);
+    });
+
     const createdDoc = {
       id: docId,
       organizationId,
       organizationName: orgName,
       title: title.trim(),
       category,
+      repositoryType,
       fileType,
       fileSizeKb,
       fileUrl,
+      cdnFileId,
       year: Number(year) || new Date().getFullYear(),
       summary,
       tags: JSON.parse(generatedTags),
@@ -245,13 +407,13 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 });
 
 // 4. Delete document
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();
 
     const [rows] = await p.query<any[]>(`
-      SELECT d.title, d.file_url, o.id as org_id, o.name as org_name 
+      SELECT d.title, d.file_url, d.cdn_file_id, o.id as org_id, o.name as org_name 
       FROM documents d 
       JOIN organizations o ON d.organization_id = o.id 
       WHERE d.id = ?
@@ -264,19 +426,20 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 
     const doc = rows[0];
 
-    // Attempt to remove physical file if exists
-    if (doc.file_url) {
-      const fullPath = path.resolve('.' + doc.file_url);
-      if (fs.existsSync(fullPath)) {
-        try {
-          fs.unlinkSync(fullPath);
-        } catch (e) {
-          console.warn('[DELETE FILE WARN]', e);
-        }
-      }
+    // If file was stored on Kroombox CDN, delete it from CDN storage
+    if (doc.cdn_file_id) {
+      deleteFromKroomboxCDN(doc.cdn_file_id).catch(cdnErr => {
+        console.warn('[KROOMBOX CDN DELETE WARN]', cdnErr);
+      });
     }
 
+    // Binary is stored in the DB row — deleting the row removes everything.
     await p.query('DELETE FROM documents WHERE id = ?', [id]);
+
+    // Clean up vector chunks in RAG service
+    deleteDocumentFromRag(id).catch(ragErr => {
+      console.warn('[RAG DELETE WARN]', ragErr);
+    });
 
     // Log activity
     await p.query(`
@@ -288,6 +451,147 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   } catch (err: any) {
     console.error('[DELETE DOC ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal menghapus dokumen.' });
+  }
+});
+
+// Helper to generate a valid PDF buffer for documents without physical file
+function generatePdfBuffer(title: string, orgName: string, category: string, summary: string): Buffer {
+  const cleanTitle = (title || 'Dokumen Resmi').replace(/[()\\]/g, '');
+  const cleanOrg = (orgName || 'KMS BUMD').replace(/[()\\]/g, '');
+  const cleanCat = (category || 'Dokumen').replace(/[()\\]/g, '');
+  const cleanSummary = (summary || 'Dokumen resmi terverifikasi KMS BUMD.').replace(/[()\\]/g, '');
+
+  const content = 
+    `BT /F1 16 Tf 50 720 Td (${cleanTitle}) Tj ET\n` +
+    `BT /F1 11 Tf 50 690 Td (Instansi BUMD: ${cleanOrg} | Kategori: ${cleanCat}) Tj ET\n` +
+    `BT /F1 10 Tf 50 660 Td (Dokumen Resmi Terverifikasi - Knowledge Management System BUMD) Tj ET\n` +
+    `BT /F1 10 Tf 50 630 Td (${cleanSummary.slice(0, 95)}) Tj ET\n` +
+    (cleanSummary.length > 95 ? `BT /F1 10 Tf 50 615 Td (${cleanSummary.slice(95, 190)}) Tj ET\n` : '') +
+    (cleanSummary.length > 190 ? `BT /F1 10 Tf 50 600 Td (${cleanSummary.slice(190, 285)}) Tj ET\n` : '');
+
+  const streamLen = Buffer.byteLength(content, 'utf-8');
+  const pdfString = 
+    `%PDF-1.4\n` +
+    `1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n` +
+    `2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n` +
+    `3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 4 0 R >> endobj\n` +
+    `4 0 obj << /Length ${streamLen} >>\nstream\n${content}endstream\nendobj\n` +
+    `xref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \ntrailer << /Size 5 /Root 1 0 R >>\nstartxref\n${320 + streamLen}\n%%EOF`;
+
+  return Buffer.from(pdfString, 'utf-8');
+}
+
+// 5. Download document (served straight from the LONGBLOB in MySQL)
+router.get('/:id/download', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const p = getPool();
+
+    const [rows] = await p.query<any[]>(`
+      SELECT d.file_data, d.file_url, d.cdn_file_id, d.file_name, d.file_type, d.title, d.summary, d.category, o.name as organization_name 
+      FROM documents d 
+      JOIN organizations o ON d.organization_id = o.id 
+      WHERE d.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan.' });
+      return;
+    }
+
+    const doc = rows[0];
+
+    // 1. If CDN file ID exists, redirect directly to high-speed signed CDN delivery URL
+    if (doc.cdn_file_id) {
+      try {
+        const signedUrl = await createCDNSignedUrl(doc.cdn_file_id, 86400);
+        if (signedUrl) {
+          res.redirect(signedUrl);
+          return;
+        }
+      } catch (cdnErr) {
+        console.warn('[CDN REDIRECT WARN]', cdnErr);
+      }
+    }
+
+    // 2. If CDN URL exists and is HTTP/HTTPS, redirect directly to high-speed Kroombox CDN
+    if (doc.file_url && (doc.file_url.startsWith('http://') || doc.file_url.startsWith('https://'))) {
+      res.redirect(doc.file_url);
+      return;
+    }
+    const ext = (doc.file_type || 'PDF').toLowerCase();
+    const safeTitle = (doc.title || 'dokumen').replace(/[/\\?%*:|"<>]/g, '_');
+    const filename = doc.file_name || `${safeTitle}.${ext}`;
+
+    // 1. Binary stored in DB -> stream it out
+    if (doc.file_data) {
+      const buf = typeof doc.file_data === 'string'
+        ? Buffer.from(doc.file_data, 'binary')
+        : Buffer.from(doc.file_data);
+
+      const mimeMap: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        doc: 'application/msword',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        xls: 'application/vnd.ms-excel',
+        txt: 'text/plain; charset=utf-8',
+        csv: 'text/csv; charset=utf-8',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg'
+      };
+      const contentType = mimeMap[ext] || 'application/octet-stream';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buf.length);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
+      res.send(buf);
+      return;
+    }
+
+    // 2. Fallback for seeded/legacy docs without binary: generate a real PDF
+    const pdfBuf = generatePdfBuffer(doc.title, doc.organization_name, doc.category, doc.summary);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
+    res.send(pdfBuf);
+  } catch (err: any) {
+    console.error('[DOWNLOAD DOC ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengunduh dokumen.' });
+  }
+});
+
+// 6. Sync all database documents to RAG Service (using real binary from MySQL)
+router.post('/sync-rag', requireAuth, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const p = getPool();
+    const [docs] = await p.query<any[]>('SELECT * FROM documents');
+    let indexedCount = 0;
+
+    for (const doc of docs) {
+      await indexDocumentToRag({
+        documentId: doc.id,
+        organizationId: doc.organization_id,
+        documentName: doc.file_name || `${doc.title}.${(doc.file_type || 'PDF').toLowerCase()}`,
+        contentBuffer: doc.file_data ? Buffer.from(doc.file_data) : null,
+        text: doc.summary || doc.title,
+        metadata: {
+          category: doc.category,
+          year: doc.year,
+          uploadedBy: doc.uploaded_by
+        }
+      });
+      indexedCount++;
+    }
+
+    res.json({
+      success: true,
+      message: `Berhasil mensinkronisasikan ${indexedCount} dokumen ke RAG service.`,
+      count: indexedCount
+    });
+  } catch (err: any) {
+    console.error('[SYNC RAG ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal sinkronisasi ke RAG service.' });
   }
 });
 

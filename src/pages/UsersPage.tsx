@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { User } from '../types';
 import { 
@@ -6,12 +7,15 @@ import {
   UserPlus, 
   Search, 
   Pencil,
-  UserMinus,
+  Trash2,
   CheckCircle2, 
   AlertTriangle,
   Building2,
   Mail,
-  ShieldCheck
+  ShieldCheck,
+  Ban,
+  RotateCcw,
+  KeyRound
 } from 'lucide-react';
 import { BottomSheet } from '../components/common/BottomSheet';
 
@@ -22,16 +26,26 @@ export const UsersPage: React.FC = () => {
     currentOrganization, 
     addUser,
     editUser,
-    removeUserFromOrg,
     updateUserRole,
+    setUserStatus,
+    deleteUser,
+    resetUserPassword,
     organizations 
   } = useApp();
+
+  if (currentUser?.role === 'user') {
+    return <Navigate to="/app" replace />;
+  }
 
   const [searchQuery, setSearchQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [confirmRemoveUser, setConfirmRemoveUser] = useState<User | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<User | null>(null);
+  const [confirmSuspendUser, setConfirmSuspendUser] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetError, setResetError] = useState<string | null>(null);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
 
   // New user form state
@@ -106,7 +120,7 @@ export const UsersPage: React.FC = () => {
       status: 'active'
     });
 
-    showToast(`Anggota baru ${newName} berhasil ditambahkan ke ${targetOrg?.name || 'organisasi'}.`);
+    showToast(`Pengguna baru ${newName} berhasil ditambahkan.`);
     setNewName('');
     setNewEmail('');
     setAddModalOpen(false);
@@ -132,26 +146,58 @@ export const UsersPage: React.FC = () => {
     if (currentUser?.role === 'superadmin' && editRole !== editingUser.role) {
       updateUserRole(editingUser.id, editRole);
       if (editRole === 'admin') {
-        showToast(`${editName} berhasil diangkat sebagai Admin! Akun ini kini dapat membuat 1 organisasi.`);
+        showToast(`${editName} berhasil diangkat sebagai Admin!`);
       } else {
         showToast(`Peran ${editName} diubah menjadi User biasa.`);
       }
     } else {
-      showToast(`Data anggota ${editName} berhasil diperbarui.`);
+      showToast(`Data pengguna ${editName} berhasil diperbarui.`);
     }
 
     setEditModalOpen(false);
     setEditingUser(null);
   };
 
-  const handleConfirmRemove = () => {
-    if (!confirmRemoveUser) return;
-    const userName = confirmRemoveUser.name;
-    const orgName = confirmRemoveUser.organizationName || 'organisasi';
-    
-    removeUserFromOrg(confirmRemoveUser.id);
-    showToast(`${userName} telah dikeluarkan dari ${orgName}.`);
-    setConfirmRemoveUser(null);
+  const handleConfirmDelete = () => {
+    if (!confirmDeleteUser) return;
+    const userName = confirmDeleteUser.name;
+
+    deleteUser(confirmDeleteUser.id);
+    showToast(`Akun ${userName} telah dihapus permanen dari sistem.`);
+    setConfirmDeleteUser(null);
+  };
+
+  const handleConfirmSuspend = () => {
+    if (!confirmSuspendUser) return;
+    const userName = confirmSuspendUser.name;
+
+    setUserStatus(confirmSuspendUser.id, 'inactive');
+    showToast(`Akun ${userName} telah dinonaktifkan (suspended). Pengguna tidak dapat login hingga diaktifkan kembali.`);
+    setConfirmSuspendUser(null);
+  };
+
+  const handleActivate = (user: User) => {
+    setUserStatus(user.id, 'active');
+    showToast(`Akun ${user.name} telah diaktifkan kembali. Pengguna dapat login kembali seperti biasa.`);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    if (newPassword.length < 6) {
+      setResetError('Kata sandi baru minimal 6 karakter.');
+      return;
+    }
+
+    try {
+      await resetUserPassword(resetTarget.id, newPassword);
+      showToast(`Kata sandi ${resetTarget.name} berhasil direset. Sampaikan kata sandi baru kepada yang bersangkutan.`);
+      setResetTarget(null);
+      setNewPassword('');
+      setResetError(null);
+    } catch (err: any) {
+      setResetError(err?.message || 'Gagal mereset kata sandi.');
+    }
   };
 
   // Stat counts
@@ -166,12 +212,12 @@ export const UsersPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {currentUser?.role === 'superadmin' ? 'Kelola Pengguna & Hak Akses' : 'Manajemen Anggota Organisasi'}
+            {currentUser?.role === 'superadmin' ? 'Kelola Pengguna & Hak Akses' : 'Manajemen Pengguna Platform'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {currentUser?.role === 'superadmin'
-              ? 'Kelola akun seluruh personil lintas BUMD, promosi hak akses, dan atur penugasan divisi.'
-              : `Kelola data anggota di lingkungan ${currentOrganization?.name || 'Organisasi'}.`}
+              ? 'Kelola akun seluruh personil, promosi hak akses, dan manajemen akun platform.'
+              : 'Kelola data akun pengguna, peran, dan hak akses.'}
           </p>
         </div>
 
@@ -181,7 +227,7 @@ export const UsersPage: React.FC = () => {
           className="group inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-sm hover:shadow active:scale-[0.98] self-start sm:self-auto cursor-pointer"
         >
           <UserPlus className="w-4 h-4 text-blue-200 group-hover:text-white transition-colors" />
-          <span className="tracking-tight">Tambah Anggota</span>
+          <span className="tracking-tight">Tambah Pengguna</span>
         </button>
       </div>
 
@@ -231,7 +277,7 @@ export const UsersPage: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1.5">
             <span className="text-xs font-medium">
-              {currentUser?.role === 'superadmin' ? 'Cakupan BUMD' : 'Status Keanggotaan'}
+              {currentUser?.role === 'superadmin' ? 'Cakupan BUMD' : 'Status Pengguna'}
             </span>
             <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
@@ -326,7 +372,7 @@ export const UsersPage: React.FC = () => {
       {/* Members Table */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[850px]">
+          <table className="w-full text-left border-collapse min-w-[1050px]">
             <thead>
               <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/70 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Pengguna</th>
@@ -343,7 +389,9 @@ export const UsersPage: React.FC = () => {
               {filteredUsers.map((user) => {
                 const isSelf = user.id === currentUser?.id;
                 const isSuperadminUser = user.role === 'superadmin';
-                const canEject = !isSelf && !isSuperadminUser && Boolean(user.organizationId);
+                const canDelete = !isSelf && !isSuperadminUser && (Boolean(user.organizationId) || currentUser?.role === 'superadmin');
+                const canManageAccount = !isSelf && !isSuperadminUser;
+                const resolvedOrgName = user.organizationName || organizations.find(o => o.id === user.organizationId)?.name || (user.role === 'superadmin' ? 'Platform Global' : 'Belum Bergabung');
 
                 // Avatar color accent
                 const avatarBg = user.role === 'superadmin'
@@ -379,8 +427,8 @@ export const UsersPage: React.FC = () => {
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
                           <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="font-medium truncate max-w-[170px]" title={user.organizationName || 'Platform Global'}>
-                            {user.organizationName || 'Platform Global'}
+                          <span className="font-medium truncate max-w-[170px]" title={resolvedOrgName}>
+                            {resolvedOrgName}
                           </span>
                         </div>
                       </td>
@@ -408,10 +456,22 @@ export const UsersPage: React.FC = () => {
 
                     {/* Status */}
                     <td className="py-3.5 px-4 text-center">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Aktif
-                      </span>
+                      {user.status === 'inactive' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200/80 dark:border-rose-800/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          Suspended
+                        </span>
+                      ) : user.status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          Menunggu
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Aktif
+                        </span>
+                      )}
                     </td>
 
                     {/* Joined Date */}
@@ -447,6 +507,48 @@ export const UsersPage: React.FC = () => {
                           )
                         )}
 
+                        {/* Suspend / Activate Account Button */}
+                        {canManageAccount && (
+                          user.status === 'inactive' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleActivate(user)}
+                              className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded-lg border border-emerald-200/80 dark:border-emerald-800/60 transition-all flex items-center gap-1 cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                              title="Aktifkan kembali akun pengguna"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Aktifkan</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmSuspendUser(user)}
+                              className="px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:text-amber-800 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-lg border border-amber-200/80 dark:border-amber-800/60 transition-all flex items-center gap-1 cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                              title="Suspend akun: blokir login tanpa menghapus data"
+                            >
+                              <Ban className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                              <span>Suspend</span>
+                            </button>
+                          )
+                        )}
+
+                        {/* Reset Password Button */}
+                        {canManageAccount && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResetTarget(user);
+                              setNewPassword('');
+                              setResetError(null);
+                            }}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/60 rounded-lg border border-sky-200/80 dark:border-sky-800/60 transition-all flex items-center gap-1 cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                            title="Reset kata sandi pengguna"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                            <span>Reset Sandi</span>
+                          </button>
+                        )}
+
                         {/* Edit Button */}
                         <button
                           type="button"
@@ -458,16 +560,16 @@ export const UsersPage: React.FC = () => {
                           <span>Edit</span>
                         </button>
 
-                        {/* Eject Button */}
-                        {canEject ? (
+                        {/* Delete Account Button */}
+                        {canDelete ? (
                           <button
                             type="button"
-                            onClick={() => setConfirmRemoveUser(user)}
+                            onClick={() => setConfirmDeleteUser(user)}
                             className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:text-rose-800 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-lg border border-rose-200/80 dark:border-rose-900/60 transition-all flex items-center gap-1 cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
-                            title="Keluarkan dari organisasi"
+                            title="Hapus akun secara permanen"
                           >
-                            <UserMinus className="w-3 h-3 text-rose-500 dark:text-rose-400" />
-                            <span>Keluarkan</span>
+                            <Trash2 className="w-3 h-3 text-rose-500 dark:text-rose-400" />
+                            <span>Hapus</span>
                           </button>
                         ) : isSelf ? (
                           <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200/60 dark:border-slate-700">
@@ -513,8 +615,8 @@ export const UsersPage: React.FC = () => {
       <BottomSheet
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
-        title="Tambah Anggota Organisasi"
-        subtitle="Tambahkan anggota baru ke dalam organisasi untuk mengakses repositori knowledge"
+        title="Tambah Pengguna Platform"
+        subtitle="Tambahkan akun pengguna baru ke dalam platform"
       >
         <form onSubmit={handleAddUserSubmit} className="space-y-4">
           <div>
@@ -568,7 +670,7 @@ export const UsersPage: React.FC = () => {
               type="submit"
               className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer"
             >
-              Simpan & Tambah Anggota
+              Simpan & Tambah Pengguna
             </button>
           </div>
         </form>
@@ -581,8 +683,8 @@ export const UsersPage: React.FC = () => {
           setEditModalOpen(false);
           setEditingUser(null);
         }}
-        title="Edit Data Anggota"
-        subtitle={`Perbarui data informasi anggota ${editingUser?.name || ''}`}
+        title="Edit Data Pengguna"
+        subtitle={`Perbarui data informasi pengguna ${editingUser?.name || ''}`}
       >
         <form onSubmit={handleEditUserSubmit} className="space-y-4">
           <div>
@@ -616,13 +718,13 @@ export const UsersPage: React.FC = () => {
                 onChange={(e) => setEditRole(e.target.value as 'user' | 'admin')}
                 className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-600 cursor-pointer"
               >
-                <option value="user" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">User Biasa (Hanya Anggota)</option>
-                <option value="admin" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Admin Organisasi (Akses 1 Organisasi)</option>
+                <option value="user" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">User Biasa</option>
+                <option value="admin" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Admin (Akses Penuh)</option>
               </select>
               <span className="text-[11px] text-slate-400 dark:text-slate-400 mt-1 block">
                 {editRole === 'admin' 
-                  ? 'Admin memiliki kuota untuk membuat & mengelola 1 organisasi BUMD.' 
-                  : 'User biasa hanya dapat bergabung ke organisasi dan mengakses Tanya AI.'}
+                  ? 'Admin memiliki akses penuh untuk mengelola berkas dan basis pengetahuan.' 
+                  : 'User biasa dapat mengunggah berkas dan mengakses repositori dokumen.'}
               </span>
             </div>
           )}
@@ -648,8 +750,103 @@ export const UsersPage: React.FC = () => {
         </form>
       </BottomSheet>
 
-      {/* Confirm Eject / Remove Member Modal */}
-      {confirmRemoveUser && (
+      {/* Confirm Suspend Account Modal */}
+      {confirmSuspendUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Ban className="w-5 h-5" />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Suspend Akun Pengguna?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                Apakah Anda yakin ingin menonaktifkan akun <strong className="text-slate-700 dark:text-slate-200">{confirmSuspendUser.name}</strong> ({confirmSuspendUser.email})? Pengguna tidak akan dapat login ke sistem hingga akunnya diaktifkan kembali. Data dan keanggotaan organisasi tetap dipertahankan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setConfirmSuspendUser(null)}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSuspend}
+                className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+              >
+                Ya, Suspend
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      <BottomSheet
+        isOpen={resetTarget !== null}
+        onClose={() => {
+          setResetTarget(null);
+          setNewPassword('');
+          setResetError(null);
+        }}
+        title="Reset Kata Sandi"
+        subtitle={`Atur kata sandi baru untuk ${resetTarget?.name || ''}`}
+      >
+        <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Kata Sandi Baru *</label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              placeholder="Minimal 6 karakter"
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                setResetError(null);
+              }}
+              className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-600"
+            />
+            <span className="text-[11px] text-slate-400 dark:text-slate-400 mt-1 block">
+              Kata sandi lama pengguna tidak diperlukan. Sampaikan kata sandi baru ini kepada yang bersangkutan agar segera diganti setelah login.
+            </span>
+            {resetError && (
+              <span className="text-[11px] text-rose-600 dark:text-rose-400 mt-1.5 block font-medium">
+                {resetError}
+              </span>
+            )}
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setResetTarget(null);
+                setNewPassword('');
+                setResetError(null);
+              }}
+              className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Reset Kata Sandi
+            </button>
+          </div>
+        </form>
+      </BottomSheet>
+
+      {/* Confirm Delete Account Modal */}
+      {confirmDeleteUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
@@ -658,27 +855,27 @@ export const UsersPage: React.FC = () => {
 
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Keluarkan Anggota?
+                Hapus Akun Pengguna?
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Apakah Anda yakin ingin mengeluarkan <strong className="text-slate-700 dark:text-slate-200">{confirmRemoveUser.name}</strong> dari organisasi <strong className="text-slate-700 dark:text-slate-200">{confirmRemoveUser.organizationName || 'ini'}</strong>? Pengguna akan dilepaskan dari organisasi dan kehilangan akses ke dokumen internal.
+                Apakah Anda yakin ingin menghapus akun <strong className="text-slate-700 dark:text-slate-200">{confirmDeleteUser.name}</strong> ({confirmDeleteUser.email}) secara permanen? Akun akan dihapus dari sistem beserta data keanggotaannya, dan pengguna tidak dapat login kembali. Tindakan ini tidak dapat dibatalkan.
               </p>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
-                onClick={() => setConfirmRemoveUser(null)}
+                onClick={() => setConfirmDeleteUser(null)}
                 className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
               >
                 Batal
               </button>
               <button
                 type="button"
-                onClick={handleConfirmRemove}
+                onClick={handleConfirmDelete}
                 className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
               >
-                Ya, Keluarkan
+                Ya, Hapus Permanen
               </button>
             </div>
           </div>

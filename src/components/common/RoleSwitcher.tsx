@@ -10,66 +10,30 @@ export const RoleSwitcher: React.FC = () => {
 
   const presets = [
     {
-      role: 'superadmin' as const,
-      orgId: undefined,
-      title: 'Superadmin (Platform)',
-      sub: 'Akses global seluruh BUMD & Sistem RAG',
-      user: users.find(u => u.role === 'superadmin')
-    },
-    {
       role: 'admin' as const,
-      orgId: 'org-pam-jaya',
-      title: 'Admin · PAM Jaya',
-      sub: 'Kelola dokumen, anggota, & profil PAM Jaya',
-      user: users.find(u => u.role === 'admin' && u.organizationId === 'org-pam-jaya')
-    },
-    {
-      role: 'admin' as const,
-      orgId: 'org-bank-bjb',
-      title: 'Admin · Bank BJB',
-      sub: 'Kelola dokumen kredit & kepatuhan Bank BJB',
-      user: users.find(u => u.role === 'admin' && u.organizationId === 'org-bank-bjb')
+      title: 'Admin · Administrator KMS',
+      sub: 'Kelola Kuota User, Monitoring CDN & Organisasi',
+      // SEMBUNYI SEMENTARA: arahkan ke dashboard selama menu paket/kuota disembunyikan
+      path: '/app',
+      user: users.find(u => u.role === 'admin' || u.role === 'superadmin')
     },
     {
       role: 'user' as const,
-      orgId: 'org-pam-jaya',
-      title: 'User · Budi (PAM Jaya)',
-      sub: 'Akses SOP distribusi & tanya AI PAM Jaya',
-      user: users.find(u => u.role === 'user' && u.organizationId === 'org-pam-jaya')
-    },
-    {
-      role: 'user' as const,
-      orgId: 'org-bank-bjb',
-      title: 'User · Dewi (Bank BJB)',
-      sub: 'Akses pedoman kredit & tanya AI Bank BJB',
-      user: users.find(u => u.role === 'user' && u.organizationId === 'org-bank-bjb')
-    },
-    {
-      role: 'user' as const,
-      orgId: null as any,
-      title: 'User Baru · Rina (Belum Tergabung)',
-      sub: 'Uji Kondisi Beranda Kosong & Alur Gabung',
-      user: users.find(u => u.email === 'rina.baru@gmail.com') || users.find(u => u.role === 'user' && !u.organizationId)
-    },
-    {
-      role: 'admin' as const,
-      orgId: null as any,
-      title: 'Admin Baru · Dedi (Belum Punya Org)',
-      sub: 'Uji Aturan 1 Admin = 1 Organisasi',
-      user: users.find(u => u.email === 'admin.baru@kms.id') || users.find(u => u.role === 'admin' && !u.organizationId)
+      title: 'User · Portal KMS & RAG',
+      sub: 'Akses Overview, Repositori Dokumen & Berkas RAG',
+      path: '/app',
+      user: users.find(u => u.role === 'user')
     }
   ];
 
   const currentPreset = presets.find(p => {
     if (!currentUser) return false;
-    if (currentUser.role === 'superadmin') return p.role === 'superadmin';
-    if (!currentUser.organizationId) return p.role === currentUser.role && !p.orgId;
-    return p.role === currentUser.role && p.orgId === currentUser.organizationId;
-  }) || presets[0];
+    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') return p.role === 'admin';
+    return p.role === 'user';
+  }) || presets[1];
 
   const getRoleIcon = (role: string) => {
-    if (role === 'superadmin') return <Shield className="w-3.5 h-3.5 text-blue-600" />;
-    if (role === 'admin') return <Building2 className="w-3.5 h-3.5 text-indigo-600" />;
+    if (role === 'admin' || role === 'superadmin') return <Shield className="w-3.5 h-3.5 text-blue-600" />;
     return <User className="w-3.5 h-3.5 text-slate-600" />;
   };
 
@@ -78,7 +42,7 @@ export const RoleSwitcher: React.FC = () => {
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
         className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-xs text-slate-700 shadow-2xs font-medium"
-        title="Ganti Akun Demo"
+        title="Ganti Peran Pengguna"
       >
         <span className="flex items-center gap-1.5">
           <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
@@ -95,16 +59,16 @@ export const RoleSwitcher: React.FC = () => {
           />
           <div className="absolute right-0 mt-2 w-72 rounded-xl bg-white border border-slate-200 shadow-lg py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
             <div className="px-3 py-1.5 border-b border-slate-100">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Ganti Akun Demo</p>
-              <p className="text-xs text-slate-500 mt-0.5">Uji batasan akses data antar organisasi</p>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Pilih Peran Akun</p>
+              <p className="text-xs text-slate-500 mt-0.5">Beralih antara hak akses User dan Admin</p>
             </div>
 
             <div className="p-1 space-y-0.5">
               {presets.map((preset, index) => {
                 const isSelected = Boolean(
                   currentUser && (
-                    (currentUser.role === 'superadmin' && preset.role === 'superadmin') ||
-                    (currentUser.role === preset.role && currentUser.organizationId === preset.orgId)
+                    ((currentUser.role === 'admin' || currentUser.role === 'superadmin') && preset.role === 'admin') ||
+                    (currentUser.role === 'user' && preset.role === 'user')
                   )
                 );
 
@@ -116,11 +80,7 @@ export const RoleSwitcher: React.FC = () => {
                         setCurrentUser(preset.user);
                       }
                       setDropdownOpen(false);
-                      if (preset.role === 'superadmin') {
-                        navigate('/superadmin');
-                      } else {
-                        navigate('/app');
-                      }
+                      navigate(preset.path);
                     }}
                     className={`w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
                       isSelected ? 'bg-slate-100 text-slate-900 font-medium' : 'hover:bg-slate-50 text-slate-700'
@@ -160,15 +120,18 @@ export const RoleSwitcher: React.FC = () => {
               >
                 Registrasi Akun Baru
               </button>
+              {/* SEMBUNYI SEMENTARA: akses manajemen paket & kuota belum dipublikasikan
               <button
                 onClick={() => {
                   setDropdownOpen(false);
-                  navigate('/superadmin/login');
+                  navigate('/app/quota');
                 }}
-                className="w-full text-left px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors font-medium"
+                className="w-full text-left px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors font-medium flex items-center justify-between"
               >
-                Login Portal Superadmin
+                <span>Akses Manajemen Kuota & Paket</span>
+                <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-semibold">Admin</span>
               </button>
+              */}
             </div>
           </div>
         </>

@@ -10,7 +10,14 @@ import {
   Building2,
   Copy,
   Check,
-  UserPlus
+  UserPlus,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Download,
+  ExternalLink,
+  Eye,
+  ArrowRight
 } from 'lucide-react';
 
 export const AskAIPage: React.FC = () => {
@@ -20,8 +27,146 @@ export const AskAIPage: React.FC = () => {
     clearChatHistory,
     currentUser,
     currentOrganization,
-    accessibleDocuments
+    organizations,
+    documents,
+    setSelectedDocForViewer
   } = useApp();
+
+  // Helper for bold and italic markdown parsing
+  const formatInlineMarkdown = (str: string): React.ReactNode => {
+    const boldRegex = /\*\*([^*]+)\*\*/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = boldRegex.exec(str)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(str.slice(lastIndex, match.index));
+      }
+      parts.push(
+        <strong key={match.index} className="font-bold text-slate-900 dark:text-white">
+          {match[1]}
+        </strong>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < str.length) {
+      parts.push(str.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : str;
+  };
+
+  // Render message content with rich clickable CDN links
+  const renderMessageContent = (text: string) => {
+    const lines = text.split('\n');
+
+    return (
+      <div className="space-y-1.5 leading-relaxed">
+        {lines.map((line, lIdx) => {
+          if (!line.trim()) {
+            return <div key={lIdx} className="h-1.5" />;
+          }
+
+          const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+          if (linkRegex.test(line)) {
+            const parts: React.ReactNode[] = [];
+            let lastIndex = 0;
+            let match: RegExpExecArray | null;
+            linkRegex.lastIndex = 0;
+
+            while ((match = linkRegex.exec(line)) !== null) {
+              if (match.index > lastIndex) {
+                parts.push(line.slice(lastIndex, match.index));
+              }
+              const label = match[1];
+              const url = match[2];
+
+              const isCdn = url.includes('cdn') || url.includes('/download') || label.includes('Unduh') || label.includes('Buka') || label.includes('Foto') || label.includes('Dokumen');
+
+              if (isCdn) {
+                parts.push(
+                  <a
+                    key={`link-${lIdx}-${match.index}`}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 my-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs hover:shadow-md transition-all cursor-pointer no-underline group"
+                  >
+                    <Download className="w-3.5 h-3.5 shrink-0" />
+                    <span>{label}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                );
+              } else {
+                parts.push(
+                  <a
+                    key={`link-${lIdx}-${match.index}`}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 font-semibold underline hover:text-blue-700 dark:hover:text-blue-300"
+                  >
+                    {label}
+                  </a>
+                );
+              }
+              lastIndex = match.index + match[0].length;
+            }
+            if (lastIndex < line.length) {
+              parts.push(line.slice(lastIndex));
+            }
+
+            return (
+              <div key={lIdx} className="leading-relaxed">
+                {parts.map((p, pIdx) => {
+                  if (typeof p === 'string') {
+                    return <span key={pIdx}>{formatInlineMarkdown(p)}</span>;
+                  }
+                  return p;
+                })}
+              </div>
+            );
+          }
+
+          return (
+            <p key={lIdx} className="leading-relaxed">
+              {formatInlineMarkdown(line)}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // If superadmin, allow picking target organization
+  const [selectedOrgId, setSelectedOrgId] = useState<string>(() => {
+    return currentOrganization?.id || currentUser?.organizationId || (organizations[0]?.id || '');
+  });
+
+  // Calculate active organization context
+  const activeOrgId = (currentUser?.role === 'superadmin')
+    ? (selectedOrgId || organizations[0]?.id || '')
+    : (currentOrganization?.id || currentUser?.organizationId || '');
+
+  const activeOrg = organizations.find(o => o.id === activeOrgId) || currentOrganization;
+
+  // Filter messages strictly to this organization
+  const visibleMessages = useMemo(() => {
+    const msgs = chatMessages.filter(m => m.organizationId === activeOrgId || m.organizationId === 'all');
+    if (msgs.length === 0) {
+      return [
+        {
+          id: `msg-welcome-${activeOrgId}`,
+          sender: 'assistant' as const,
+          text: `Halo! Saya asisten KnowBase AI bertenaga RAG untuk **${activeOrg?.name || 'Organisasi Anda'}**. Saya siap mencari dan merangkum seluruh SOP serta dokumen resmi yang terindeks khusus di lingkungan organisasi ini.`,
+          timestamp: 'Baru saja',
+          organizationId: activeOrgId
+        }
+      ];
+    }
+    return msgs;
+  }, [chatMessages, activeOrgId, activeOrg?.name]);
 
   const [inputQuestion, setInputQuestion] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,7 +179,7 @@ export const AskAIPage: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages, isSubmitting]);
+  }, [visibleMessages, isSubmitting]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +189,7 @@ export const AskAIPage: React.FC = () => {
     setInputQuestion('');
     setIsSubmitting(true);
     try {
-      await sendChatMessage(q);
+      await sendChatMessage(q, activeOrgId);
     } finally {
       setIsSubmitting(false);
     }
@@ -54,7 +199,7 @@ export const AskAIPage: React.FC = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await sendChatMessage(promptText);
+      await sendChatMessage(promptText, activeOrgId);
     } finally {
       setIsSubmitting(false);
     }
@@ -66,34 +211,49 @@ export const AskAIPage: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Dynamic prompt suggestions generated automatically from the organization's indexed documents
-  // Dynamic prompt suggestions generated automatically from the organization's indexed documents
+  // Prompt suggestions strictly bound to the active organization and its uploaded documents
   const suggestions = useMemo(() => {
-    const orgDocs = accessibleDocuments || [];
-    if (orgDocs.length > 0) {
-      return orgDocs.slice(0, 4).map((doc) => {
-        const cleanTitle = doc.title.length > 36 ? doc.title.slice(0, 34) + '...' : doc.title;
-        switch (doc.category) {
-          case 'SOP':
-            return `Bagaimana prosedur pelaksanaan ${cleanTitle}?`;
-          case 'Regulasi & Kebijakan':
-            return `Apa saja aturan utama dalam ${cleanTitle}?`;
-          case 'Laporan Kinerja':
-            return `Rangkum indikator capaian ${cleanTitle}`;
-          case 'Panduan Teknis':
-            return `Jelaskan langkah teknis ${cleanTitle}`;
-          default:
-            return `Jelaskan ringkasan isi dari ${cleanTitle}`;
-        }
-      });
+    if (!activeOrgId) {
+      return [];
     }
 
-    return [
-      `Bagaimana SOP operasional layanan di ${currentOrganization?.name || 'organisasi'}?`,
-      'Apa saja aturan kerja dan kebijakan internal?',
-      'Bagaimana mekanisme persetujuan dokumen resmi?'
-    ];
-  }, [accessibleDocuments, currentOrganization?.name]);
+    // Strict company boundary: only retrieve documents belonging specifically to this organization
+    const orgDocs = (documents || []).filter(doc => doc.organizationId === activeOrgId);
+
+    // If the company has no documents yet, return empty list (no suggestions will be shown)
+    if (!orgDocs || orgDocs.length === 0) {
+      return [];
+    }
+
+    // Generate questions strictly tailored to this company's real documents
+    const prompts: string[] = [];
+
+    // Add a file request shortcut so user can test direct CDN download
+    const firstDoc = orgDocs[0];
+    if (firstDoc) {
+      const shortTitle = firstDoc.title.length > 28 ? firstDoc.title.slice(0, 26) + '...' : firstDoc.title;
+      prompts.push(`Minta link unduh file ${shortTitle}`);
+    }
+
+    orgDocs.slice(0, 3).forEach((doc) => {
+      const cleanTitle = doc.title.length > 35 ? doc.title.slice(0, 33) + '...' : doc.title;
+      const cat = (doc.category || '').toLowerCase();
+
+      if (cat.includes('sop') || cat.includes('prosedur')) {
+        prompts.push(`Bagaimana prosedur pelaksanaan ${cleanTitle}?`);
+      } else if (cat.includes('kredit') || cat.includes('keuangan')) {
+        prompts.push(`Apa ketentuan dan kriteria dalam ${cleanTitle}?`);
+      } else if (cat.includes('regulasi') || cat.includes('kebijakan') || cat.includes('aturan')) {
+        prompts.push(`Apa saja poin penting dalam ${cleanTitle}?`);
+      } else if (cat.includes('laporan') || cat.includes('kinerja')) {
+        prompts.push(`Rangkum capaian dalam ${cleanTitle}`);
+      } else {
+        prompts.push(`Rangkum informasi utama dalam ${cleanTitle}`);
+      }
+    });
+
+    return prompts;
+  }, [activeOrgId, documents]);
 
   // If regular user or unassigned admin is not joined to any organization, show barrier
   if (currentUser?.role !== 'superadmin' && !currentOrganization) {
@@ -148,23 +308,37 @@ export const AskAIPage: React.FC = () => {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {currentUser?.role === 'user'
-                  ? `AI Assistant · ${currentOrganization?.name || 'Organisasi'}`
-                  : 'KMS RAG AI Assistant'}
+                AI Assistant · {activeOrg?.name || 'Organisasi'}
               </h2>
               <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/70 border border-blue-200/70 dark:border-blue-800/70 px-2 py-0.5 rounded-full shrink-0">
-                RAG Knowledge Base
+                RAG Multi-Tenant AI
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-              {currentUser?.role === 'user'
-                ? 'Terhubung dengan repositori SOP, regulasi, dan arsip resmi organisasi Anda.'
-                : `Lingkup data: ${currentUser?.role === 'superadmin' ? 'Seluruh BUMD (Global KMS)' : (currentOrganization?.name || 'Organisasi')}`}
+              Lingkungan terisolasi RAG: <strong className="text-slate-700 dark:text-slate-200">{activeOrg?.name || 'Organisasi'}</strong> ({((documents || []).filter(d => d.organizationId === activeOrgId)).length} Dokumen terindeks)
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {currentUser?.role === 'superadmin' && (
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <select
+                value={activeOrgId}
+                onChange={(e) => setSelectedOrgId(e.target.value)}
+                className="text-xs font-semibold bg-transparent text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                title="Pilih Organisasi BUMD untuk Tanya AI"
+              >
+                {organizations.map(org => (
+                  <option key={org.id} value={org.id} className="dark:bg-slate-900 text-slate-900 dark:text-white">
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {currentUser?.role === 'user' && (
             <Link
               to="/app/join-org"
@@ -176,9 +350,9 @@ export const AskAIPage: React.FC = () => {
           )}
 
           <button
-            onClick={clearChatHistory}
+            onClick={() => clearChatHistory(activeOrgId)}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-rose-600 dark:text-rose-400 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/40 rounded-xl transition-all duration-150 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95"
-            title="Bersihkan Percakapan"
+            title="Bersihkan Percakapan untuk Organisasi Ini"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Bersihkan</span>
@@ -186,9 +360,23 @@ export const AskAIPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Empty Document Warning Banner */}
+      {((documents || []).filter(d => d.organizationId === activeOrgId)).length === 0 && (
+        <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-2xl text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2.5 shrink-0">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            {currentUser?.role === 'user' ? (
+              <>Organisasi <strong>{activeOrg?.name}</strong> belum memiliki dokumen resmi yang dipublikasikan oleh Administrator.</>
+            ) : (
+              <>Organisasi <strong>{activeOrg?.name}</strong> belum memiliki dokumen resmi yang diunggah. Kelola berkas di menu <Link to="/app/documents" className="underline font-semibold hover:text-amber-950 dark:hover:text-white">Repositori Dokumen</Link> agar AI dapat menjawab pertanyaan seputar organisasi ini.</>
+            )}
+          </span>
+        </div>
+      )}
+
       {/* Chat Messages Viewport */}
       <div className="flex-1 min-h-0 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs p-4 sm:p-5 overflow-y-auto space-y-5 transition-colors">
-        {chatMessages.map((msg) => (
+        {visibleMessages.map((msg) => (
           <div
             key={msg.id}
             className={`flex gap-3 sm:gap-3.5 animate-in fade-in slide-in-from-bottom-2 duration-150 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'
@@ -222,16 +410,77 @@ export const AskAIPage: React.FC = () => {
                     : 'bg-white dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 text-slate-800 dark:text-slate-100 rounded-tl-xs shadow-slate-200/40 dark:shadow-black/20'
                   }`}
               >
-                <div className="whitespace-pre-wrap selection:bg-blue-500 selection:text-white leading-relaxed">
-                  {msg.text}
-                </div>
+                {msg.sender === 'user' ? (
+                  <div className="whitespace-pre-wrap selection:bg-blue-500 selection:text-white leading-relaxed">
+                    {msg.text}
+                  </div>
+                ) : (
+                  renderMessageContent(msg.text)
+                )}
+
+                {/* Real RAG Source Documents & Citations */}
+                {msg.sender === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-700/60">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="w-3 h-3 text-blue-500" />
+                        <span>Sumber Dokumen Terkait ({msg.sources.length}):</span>
+                      </span>
+                      <span className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">Tersedia di CDN Edge</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {msg.sources.map((src, idx) => {
+                        const matchedDoc = (documents || []).find(
+                          d => d.id === src.documentId || d.title.toLowerCase() === src.documentTitle.toLowerCase()
+                        );
+                        return (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/50 text-[11px] text-blue-800 dark:text-blue-300 font-medium shadow-2xs group"
+                          >
+                            <span className="truncate max-w-[200px] font-semibold">{src.documentTitle}</span>
+                            {src.page && (
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-white/70 dark:bg-slate-800/60 px-1 py-0.5 rounded">
+                                Hal. {src.page}
+                              </span>
+                            )}
+                            {src.similarityScore && (
+                              <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                                {Math.round(src.similarityScore * 100)}%
+                              </span>
+                            )}
+                            {matchedDoc && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDocForViewer(matchedDoc)}
+                                className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 underline cursor-pointer ml-1"
+                                title="Buka Dokumen di CDN Viewer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Buka</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Assistant footer toolbar */}
                 {msg.sender === 'assistant' && (
-                  <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                    <span className="text-[10px] font-medium tracking-wider uppercase text-slate-400 dark:text-slate-500">
-                      Basis Dokumen Terverifikasi
-                    </span>
+                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/50">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <span>RAG Terverifikasi</span>
+                      </span>
+                      {msg.model && (
+                        <span className="hidden sm:inline text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                          {msg.model}
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={() => handleCopyText(msg.text, msg.id)}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"

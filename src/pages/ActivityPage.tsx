@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { 
   Search, 
@@ -21,6 +22,10 @@ export const ActivityPage: React.FC = () => {
     clearActivityLogs, 
     deleteActivityLog 
   } = useApp();
+
+  if (currentUser?.role === 'user') {
+    return <Navigate to="/app" replace />;
+  }
 
   const [filterType, setFilterType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,8 +95,8 @@ export const ActivityPage: React.FC = () => {
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {currentUser?.role === 'superadmin'
-              ? 'Pencatatan real-time interaksi berkas, kueri RAG, dan perubahan hak akses lintas organisasi.'
-              : `Log aktivitas internal untuk repositori dokumen & kueri AI ${currentOrganization?.name || 'Organisasi'}.`}
+              ? 'Pencatatan real-time interaksi berkas, kueri RAG, dan perubahan hak akses lintas project.'
+              : `Log aktivitas internal untuk repositori dokumen & kueri AI project ${currentOrganization?.name || ''}.`}
           </p>
         </div>
 

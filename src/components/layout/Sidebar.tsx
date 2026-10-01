@@ -16,11 +16,22 @@ import {
   MessageSquare,
   UserPlus,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Zap,
+  HardDrive,
+  Sliders,
+  FolderKanban
 } from 'lucide-react';
 
 interface SidebarProps {
   onCloseMobile?: () => void;
+}
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: any;
+  badge?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
@@ -33,37 +44,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
     navigate('/login');
   };
 
-  const getNavLinks = () => {
+  const getNavLinks = (): NavItem[] => {
     if (!currentUser) return [];
 
-    if (currentUser.role === 'superadmin') {
+    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
       return [
         { to: '/app', label: 'Overview', icon: LayoutDashboard },
-        { to: '/app/organizations', label: 'Organisasi', icon: Building2 },
-        { to: '/app/documents', label: 'Dokumen', icon: FileText },
+        { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
+        { to: '/app/projects', label: 'Project', icon: FolderKanban },
+        { to: '/app/cdn', label: 'Monitoring Edge CDN', icon: HardDrive },
         { to: '/app/users', label: 'Pengguna', icon: Users },
         { to: '/app/activity', label: 'Log Aktivitas', icon: Activity },
       ];
-    } else if (currentUser.role === 'admin') {
-      if (!currentOrganization) {
-        // Admin belum membuat organisasi: Hanya tampilkan menu Buat Organisasi
-        return [
-          { to: '/app', label: 'Buat Organisasi', icon: Building2 },
-        ];
-      }
-
-      // Ketika sudah create organisasi, baru fitur-fiturnya muncul semua:
+    } else {
+      // User Role - Halaman overview, repositori dokumen & pengetahuan, project
       return [
         { to: '/app', label: 'Overview', icon: LayoutDashboard },
-        { to: '/app/documents', label: 'Dokumen Organisasi', icon: FileText },
-        { to: '/app/users', label: 'Kelola Anggota', icon: Users },
-        { to: '/app/activity', label: 'Log Aktivitas', icon: Activity },
-      ];
-    } else {
-      // Regular User - Super simple experience: Just AI Chat and Change Organization
-      return [
-        { to: '/app/chat', label: 'Tanya AI', icon: Sparkles },
-        { to: '/app/join-org', label: currentOrganization ? 'Organisasi Saya' : 'Gabung Organisasi', icon: Building2 },
+        { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
+        { to: '/app/projects', label: 'Project', icon: FolderKanban },
       ];
     }
   };
@@ -71,16 +69,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
   const navLinks = getNavLinks();
 
   const isLinkActive = (to: string) => {
-    // Regular User
-    if (currentUser?.role === 'user') {
-      if (to === '/app/chat') {
-        return location.pathname === '/app/chat' || (location.pathname === '/app' && Boolean(currentOrganization));
-      }
-      if (to === '/app/join-org') {
-        return location.pathname === '/app/join-org' || (location.pathname === '/app' && !currentOrganization);
-      }
-    }
-    // Superadmin & Admin
     if (to === '/app') {
       return location.pathname === '/app';
     }
@@ -94,27 +82,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
         <div className={`h-14 ${sidebarCollapsed ? 'px-2 justify-center' : 'px-4 justify-between'} flex items-center border-b border-slate-100 dark:border-slate-800/80`}>
           {!sidebarCollapsed ? (
             <>
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-sm shadow-blue-500/25 tracking-wider shrink-0">
-                  KMS
+              <Link to="/" className="flex items-center gap-2.5 min-w-0 group focus:outline-none" title="Ke Beranda KnowBase">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-slate-900 border border-blue-100 dark:border-slate-800 flex items-center justify-center gap-1 shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <span className="w-1.5 h-3.5 rounded-full bg-blue-600 rotate-12 inline-block transform" />
+                  <span className="w-1 h-2.5 rounded-full bg-blue-400 rotate-12 inline-block transform" />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-slate-900 dark:text-white tracking-tight leading-none truncate">
-                    KMS Platform
+                  <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white font-sans leading-none truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    KNOWBASE
                   </span>
                   <div className="mt-1 flex items-center">
                     <span className="text-[9px] font-semibold tracking-wider font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60 truncate">
-                      {currentUser?.role === 'superadmin'
-                        ? 'SUPERADMIN'
-                        : currentOrganization
-                          ? currentOrganization.code
-                          : currentUser?.role === 'admin'
-                            ? 'ADMIN'
-                            : 'USER'}
+                      {currentUser?.role === 'admin' || currentUser?.role === 'superadmin' ? 'ADMIN' : 'USER'}
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
               <button
                 type="button"
                 onClick={toggleSidebarCollapsed}
@@ -129,12 +112,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
             <button
               type="button"
               onClick={toggleSidebarCollapsed}
-              className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white font-bold text-xs shadow-sm shadow-blue-500/20 group transition-all cursor-pointer"
+              className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900 hover:bg-blue-100 dark:hover:bg-slate-800 border border-blue-100 dark:border-slate-800 flex items-center justify-center shadow-2xs group transition-all cursor-pointer"
               title="Buka penuh sidebar"
               aria-label="Buka penuh sidebar"
             >
-              <span className="group-hover:hidden">KMS</span>
-              <PanelLeftOpen className="w-4 h-4 hidden group-hover:block transition-all" />
+              <div className="flex items-center gap-1 group-hover:hidden">
+                <span className="w-1.5 h-3.5 rounded-full bg-blue-600 rotate-12 inline-block transform" />
+                <span className="w-1 h-2.5 rounded-full bg-blue-400 rotate-12 inline-block transform" />
+              </div>
+              <PanelLeftOpen className="w-4 h-4 text-blue-600 dark:text-blue-400 hidden group-hover:block transition-all" />
             </button>
           )}
         </div>
@@ -143,11 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-3'} py-3`}>
           {!sidebarCollapsed ? (
             <span className="px-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-              {currentUser?.role === 'superadmin'
-                ? 'Menu Superadmin'
-                : currentUser?.role === 'admin'
-                  ? (currentOrganization ? 'Menu Admin' : 'Setup Organisasi')
-                  : 'Menu Pengguna'}
+              {currentUser?.role === 'admin' || currentUser?.role === 'superadmin' ? 'Menu Admin' : 'Menu Pengguna'}
             </span>
           ) : (
             <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 mb-2" />
@@ -183,7 +165,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
                   )}
 
                   <Icon className={`${sidebarCollapsed ? 'w-5 h-5' : 'w-4 h-4'} shrink-0`} />
-                  {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                  {!sidebarCollapsed && (
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="truncate">{item.label}</span>
+                      {item.badge && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide ${
+                          active ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Floating tooltip when collapsed */}
                   {sidebarCollapsed && (
@@ -195,31 +188,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
               );
             })}
           </nav>
-
-          {/* Locked Features Helper when Admin has not created an organization */}
-          {!currentOrganization && currentUser?.role === 'admin' && (
-            !sidebarCollapsed ? (
-              <div className="mx-1 mt-4 p-3.5 rounded-xl bg-amber-50/80 dark:bg-slate-800/70 border border-amber-200/70 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-400 space-y-1.5 shadow-2xs">
-                <p className="font-semibold text-amber-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <FolderLock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>Fitur Terkunci</span>
-                </p>
-                <p className="text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
-                  Fitur Dokumen, Kelola Anggota, dan Log Aktivitas akan otomatis terbuka setelah Anda membuat 1 organisasi.
-                </p>
-              </div>
-            ) : (
-              <div
-                className="mt-3 flex justify-center text-amber-600 dark:text-amber-400 relative group cursor-help"
-                title="Fitur Terkunci: Buat 1 organisasi untuk membuka fitur"
-              >
-                <FolderLock className="w-5 h-5" />
-                <div className="hidden lg:group-hover:flex absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900 text-amber-300 text-xs font-medium rounded-lg shadow-xl whitespace-nowrap z-50 border border-slate-800 pointer-events-none">
-                  Buat 1 organisasi untuk membuka fitur
-                </div>
-              </div>
-            )
-          )}
         </div>
       </div>
 

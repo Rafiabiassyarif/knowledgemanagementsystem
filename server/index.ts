@@ -1,9 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import path from 'path';
-import fs from 'fs';
 import dotenv from 'dotenv';
 import { initDatabase } from './db';
+import { requireAuth } from './middleware/auth';
 
 import authRoutes from './routes/auth';
 import organizationRoutes from './routes/organizations';
@@ -12,6 +11,10 @@ import documentRoutes from './routes/documents';
 import activityRoutes from './routes/activities';
 import joinRequestRoutes from './routes/joinRequests';
 import statsRoutes from './routes/stats';
+import adminRoutes from './routes/admin';
+import cdnRoutes from './routes/cdn';
+
+import { swaggerRouter } from './docs/swagger';
 
 dotenv.config();
 
@@ -26,12 +29,9 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Ensure uploads directory exists
-const uploadsDir = path.resolve('uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use('/uploads', express.static(uploadsDir));
+// API Documentation & OpenAPI Spec (Public)
+app.use('/api', swaggerRouter);
+app.get('/docs', (_req: Request, res: Response) => res.redirect('/api/docs'));
 
 // API Health Check
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -44,13 +44,19 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // API Routes
+// Public: auth endpoints (login, register, superadmin-login)
 app.use('/api/auth', authRoutes);
+
+// Projects / Organizations: GET endpoints are public, mutations are protected inside router
 app.use('/api/organizations', organizationRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/projects', organizationRoutes);
+app.use('/api/users', requireAuth, userRoutes);
 app.use('/api/documents', documentRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/join-requests', joinRequestRoutes);
-app.use('/api/stats', statsRoutes);
+app.use('/api/activities', requireAuth, activityRoutes);
+app.use('/api/join-requests', requireAuth, joinRequestRoutes);
+app.use('/api/stats', requireAuth, statsRoutes);
+app.use('/api/admin', requireAuth, adminRoutes);
+app.use('/api/cdn', requireAuth, cdnRoutes);
 
 // Global Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

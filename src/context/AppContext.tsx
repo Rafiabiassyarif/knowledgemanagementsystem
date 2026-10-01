@@ -1,26 +1,26 @@
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-import { 
-  User, 
-  Organization, 
-  DocumentItem, 
-  KnowledgeChunk, 
-  ActivityLog, 
-  JoinRequest, 
-  RagConfig, 
-  ChatMessage, 
+import {
+  User,
+  Organization,
+  DocumentItem,
+  KnowledgeChunk,
+  ActivityLog,
+  JoinRequest,
+  RagConfig,
+  ChatMessage,
   CitationReference,
   UserRole
 } from '../types';
-import { 
-  initialOrganizations, 
-  initialUsers, 
-  initialDocuments, 
-  initialKnowledgeChunks, 
-  initialActivityLogs, 
-  initialJoinRequests, 
-  defaultRagConfig 
+import {
+  initialOrganizations,
+  initialUsers,
+  initialDocuments,
+  initialKnowledgeChunks,
+  initialActivityLogs,
+  initialJoinRequests,
+  defaultRagConfig
 } from '../data/mockData';
-import { api } from '../services/api';
+import { api, tokenStore } from '../services/api';
 
 interface AppContextType {
   currentUser: User | null;
@@ -34,26 +34,30 @@ interface AppContextType {
   ragConfig: RagConfig;
   chatMessages: ChatMessage[];
   currentOrganization: Organization | null;
+  currentProject: Organization | null;
+  projects: Organization[];
+  activeProjectId: string | null;
+  switchProject: (projectId: string) => void;
   accessibleDocuments: DocumentItem[];
   accessibleChunks: KnowledgeChunk[];
-  
+
   // Auth & Registration actions
-  login: (email: string, password: string) => { success: boolean; message?: string; user?: User };
-  superadminLogin: (email: string, password: string) => { success: boolean; message?: string; user?: User };
-  registerUser: (data: { 
-    name: string; 
-    email: string; 
-    password: string; 
-    department: string; 
-    phone?: string; 
-    employeeId?: string; 
-    orgCode?: string 
-  }) => { success: boolean; message: string; user?: User; requiresOrgJoin: boolean };
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string; user?: User }>;
+  superadminLogin: (email: string, password: string) => Promise<{ success: boolean; message?: string; user?: User }>;
+  registerUser: (data: {
+    name: string;
+    email: string;
+    password: string;
+    department: string;
+    phone?: string;
+    employeeId?: string;
+    orgCode?: string
+  }) => Promise<{ success: boolean; message: string; user?: User; requiresOrgJoin: boolean }>;
   logout: () => void;
   joinOrganization: (orgIdOrCode: string) => { success: boolean; message: string };
   leaveOrganization: () => void;
   joinOrganizationForCurrentUser: (orgCode: string, reason?: string) => { success: boolean; message: string; status: 'joined' | 'pending' };
-  
+
   // Organization and Content Actions
   addOrganization: (newOrg: Omit<Organization, 'id' | 'documentsCount' | 'usersCount' | 'chunksCount' | 'aiQueriesCount' | 'storageUsedMb' | 'createdAt'>) => { success: boolean; message: string; org?: Organization };
   deleteOrganization: (orgId: string) => { success: boolean; message: string };
@@ -69,21 +73,25 @@ interface AppContextType {
     tags: string[];
     summary: string;
     organizationId?: string;
-  }) => Promise<DocumentItem>;
+  }, file?: File) => Promise<DocumentItem>;
   deleteDocument: (id: string) => void;
   approveJoinRequest: (requestId: string) => void;
   rejectJoinRequest: (requestId: string) => void;
   submitJoinRequest: (orgCode: string, name: string, email: string, dept: string, reason: string) => { success: boolean; message: string };
   updateRagConfig: (newConfig: Partial<RagConfig>) => void;
-  sendChatMessage: (question: string) => Promise<void>;
-  clearChatHistory: () => void;
+  sendChatMessage: (question: string, overrideOrgId?: string) => Promise<void>;
+  clearChatHistory: (targetOrgId?: string) => void;
   addUser: (userData: Omit<User, 'id' | 'joinedAt' | 'avatarInitials'>) => void;
   editUser: (userId: string, data: Partial<User>) => void;
   removeUserFromOrg: (userId: string) => void;
   updateUserRole: (userId: string, newRole: UserRole) => void;
+  setUserStatus: (userId: string, status: 'active' | 'inactive') => void;
+  resetUserPassword: (userId: string, newPassword: string) => Promise<boolean>;
+  refreshBackendData: () => Promise<void>;
+  deleteUser: (userId: string) => void;
   clearActivityLogs: () => void;
   deleteActivityLog: (id: string) => void;
-  
+
   // UI states
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -105,7 +113,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem('kms_users_store');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return initialUsers;
   });
@@ -114,7 +122,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('kms_current_user');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return null;
   });
@@ -122,7 +130,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     const saved = localStorage.getItem('kms_orgs_store');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return initialOrganizations;
   });
@@ -131,7 +139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     const saved = localStorage.getItem('kms_logs_store');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return initialActivityLogs;
   });
@@ -201,9 +209,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [activityLogs]);
 
   // Load and synchronize with MySQL backend on startup
+  // Skip entirely when there is no session token: public pages (landing, login,
+  // register) must not fire 401s against protected endpoints — protected data
+  // is refreshed via refreshBackendData() right after login instead.
   useEffect(() => {
-    async function loadBackendData() {
-      try {
+    if (!tokenStore.get()) return;
+    refreshBackendData();
+  }, []);
+
+  async function refreshBackendData() {
+    try {
         const [orgRes, usersRes, docsRes, logsRes] = await Promise.allSettled([
           api.organizations.getAll(),
           api.users.getAll(),
@@ -211,24 +226,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           api.activities.getAll()
         ]);
 
+        // IMPORTANT: only replace local state when backend actually has data,
+        // so a failed/empty backend response never wipes seeded or locally-added content.
         if (orgRes.status === 'fulfilled' && orgRes.value.success && orgRes.value.organizations.length > 0) {
           setOrganizations(orgRes.value.organizations);
         }
         if (usersRes.status === 'fulfilled' && usersRes.value.success && usersRes.value.users.length > 0) {
-          setUsers(usersRes.value.users);
+          const orgList = (orgRes.status === 'fulfilled' && orgRes.value.success) ? orgRes.value.organizations : organizations;
+          const mappedUsers = usersRes.value.users.map((u: any) => {
+            if (u.organizationId && !u.organizationName) {
+              const matched = orgList.find((o: any) => o.id === u.organizationId);
+              if (matched) u.organizationName = matched.name;
+            }
+            return u;
+          });
+          setUsers(mappedUsers);
+          localStorage.setItem('kms_users_store', JSON.stringify(mappedUsers));
         }
-        if (docsRes.status === 'fulfilled' && docsRes.value.success && docsRes.value.documents.length > 0) {
-          setDocuments(docsRes.value.documents);
+        if (docsRes.status === 'fulfilled' && docsRes.value.success) {
+          setDocuments(prev => {
+            const backendDocs = docsRes.value.documents || [];
+            if (backendDocs.length === 0) return prev; // backend empty: keep local/seed docs
+            const backendIds = new Set(backendDocs.map((d: any) => d.id));
+            const localOnly = prev.filter(d => !backendIds.has(d.id));
+            return [...localOnly, ...backendDocs];
+          });
         }
-        if (logsRes.status === 'fulfilled' && logsRes.value.success && logsRes.value.logs.length > 0) {
-          setActivityLogs(logsRes.value.logs);
+        if (logsRes.status === 'fulfilled' && logsRes.value.success) {
+          setActivityLogs(prev => {
+            const backendLogs = logsRes.value.logs || [];
+            if (backendLogs.length === 0) return prev; // backend empty: keep local logs
+            return backendLogs;
+          });
+          localStorage.setItem('kms_logs_store', JSON.stringify(logsRes.value.logs || []));
         }
-      } catch (err) {
-        console.warn('[BACKEND SYNC INFO] Using local storage state:', err);
-      }
+    } catch (err) {
+      console.warn('[BACKEND SYNC INFO] Using local storage state:', err);
     }
-    loadBackendData();
-  }, []);
+  }
 
   // Initial chat state with realistic enterprise assistant greeting
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -241,165 +276,223 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   ]);
 
-  // Current Organization helper
-  const currentOrganization = useMemo(() => {
-    if (!currentUser || !currentUser.organizationId) return null;
-    return organizations.find(o => o.id === currentUser.organizationId) || null;
-  }, [currentUser, organizations]);
+  // Active Project ID (stored in localStorage or currentUser.organizationId)
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
+    return localStorage.getItem('kms_active_project_id') || null;
+  });
 
-  // Accessible documents based on role
+  // Current Organization / Project helper
+  const currentOrganization = useMemo(() => {
+    if (!currentUser) return null;
+    const targetId = activeProjectId || currentUser.organizationId;
+    if (targetId) {
+      const found = organizations.find(o => o.id === targetId);
+      if (found) return found;
+    }
+    // If user has no specific project active, default to the first available project
+    if (organizations && organizations.length > 0) {
+      return organizations[0];
+    }
+    return null;
+  }, [currentUser, activeProjectId, organizations]);
+
+  const currentProject = currentOrganization;
+  const projects = organizations;
+
+  const switchProject = (projectId: string) => {
+    setActiveProjectId(projectId);
+    localStorage.setItem('kms_active_project_id', projectId);
+    if (currentUser) {
+      const targetOrg = organizations.find(o => o.id === projectId);
+      const updatedUser: User = {
+        ...currentUser,
+        organizationId: projectId,
+        organizationName: targetOrg?.name || currentUser.organizationName
+      };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('kms_current_user', JSON.stringify(updatedUser));
+      setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+
+      // Persist active project in MySQL backend
+      api.membership.join(currentUser.id, projectId).catch(e => console.warn('[BACKEND SWITCH PROJECT ERROR]', e));
+    }
+  };
+
+  // Accessible documents based on role & active project
   const accessibleDocuments = useMemo(() => {
     if (!currentUser) return [];
-    if (currentUser.role === 'superadmin') {
+    const targetId = activeProjectId || currentUser.organizationId;
+    if (!targetId) return [];
+    if (currentUser.role === 'superadmin' && !activeProjectId) {
       return documents;
     }
-    return documents.filter(doc => doc.organizationId === currentUser.organizationId);
-  }, [currentUser, documents]);
+    return documents.filter(doc => !doc.organizationId || doc.organizationId === targetId);
+  }, [currentUser, activeProjectId, documents]);
 
-  // Accessible chunks based on role
+  // Accessible chunks based on role & active project
   const accessibleChunks = useMemo(() => {
     if (!currentUser) return [];
-    if (currentUser.role === 'superadmin') {
+    const targetId = activeProjectId || currentUser.organizationId;
+    if (!targetId) return [];
+    if (currentUser.role === 'superadmin' && !activeProjectId) {
       return chunks;
     }
-    return chunks.filter(c => c.organizationId === currentUser.organizationId);
-  }, [currentUser, chunks]);
+    return chunks.filter(c => c.organizationId === targetId);
+  }, [currentUser, activeProjectId, chunks]);
 
   // General login for all roles (Superadmin, Admin, User)
-  const login = (email: string, password: string): { success: boolean; message?: string; user?: User } => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {
     const cleanEmail = email.trim().toLowerCase();
-    
-    // Direct convenient account mappings
-    let targetEmail = cleanEmail;
-    if (cleanEmail === 'superadmin@kms.id' || cleanEmail === 'superadmin') {
-      targetEmail = 'rafi.superadmin@kms.gov.id';
-    } else if (cleanEmail === 'admin@kms.id' || cleanEmail === 'admin.pam@kms.id' || cleanEmail === 'admin') {
-      targetEmail = 'andi.pratama@pamjaya.co.id';
-    } else if (cleanEmail === 'user@kms.id' || cleanEmail === 'budi@pamjaya.co.id' || cleanEmail === 'user') {
-      targetEmail = 'budi.santoso@pamjaya.co.id';
+
+    if (!password) {
+      return { success: false, message: 'Kata sandi wajib diisi.' };
     }
 
-    const foundUser = users.find(u => u.email.toLowerCase() === targetEmail);
+    try {
+      // Authenticate against MySQL backend (bcrypt-validated, JWT issued)
+      const res = await api.auth.login({ email: cleanEmail, password });
+      if (!res.success || !res.user) {
+        return { success: false, message: res.message || 'Email atau kata sandi tidak sesuai.' };
+      }
 
-    if (!foundUser) {
-      return { success: false, message: 'Alamat email belum terdaftar dalam sistem KMS. Silakan registrasi terlebih dahulu.' };
+      tokenStore.set(res.token);
+      const backendUser = res.user as User;
+
+      // Sync active project with user's organizationId
+      if (backendUser.organizationId) {
+        setActiveProjectId(backendUser.organizationId);
+        localStorage.setItem('kms_active_project_id', backendUser.organizationId);
+      } else {
+        setActiveProjectId(null);
+        localStorage.removeItem('kms_active_project_id');
+      }
+
+      setCurrentUser(backendUser);
+      setUsers(prev => {
+        if (prev.some(u => u.id === backendUser.id)) {
+          return prev.map(u => u.id === backendUser.id ? backendUser : u);
+        }
+        return [...prev, backendUser];
+      });
+
+      const log: ActivityLog = {
+        id: `act-${Date.now()}`,
+        organizationId: backendUser.organizationId,
+        organizationName: backendUser.organizationName,
+        actorName: backendUser.name,
+        actorRole: backendUser.role,
+        action: 'Masuk ke Platform KMS',
+        target: backendUser.role === 'superadmin' ? 'Portal Superadmin' : 'Sesi Web User',
+        timestamp: 'Baru saja',
+        type: 'user'
+      };
+      setActivityLogs(prev => [log, ...prev]);
+
+      // Session is now valid: pull fresh protected data for the app shell.
+      refreshBackendData();
+
+      return { success: true, user: backendUser };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Gagal terhubung ke server autentikasi.' };
     }
-
-    setCurrentUser(foundUser);
-
-    const log: ActivityLog = {
-      id: `act-${Date.now()}`,
-      organizationId: foundUser.organizationId,
-      organizationName: foundUser.organizationName,
-      actorName: foundUser.name,
-      actorRole: foundUser.role,
-      action: 'Masuk ke Platform KMS',
-      target: foundUser.role === 'superadmin' ? 'Portal Superadmin' : 'Sesi Web User',
-      timestamp: 'Baru saja',
-      type: 'user'
-    };
-    setActivityLogs(prev => [log, ...prev]);
-
-    return { success: true, user: foundUser };
   };
 
-  // Dedicated Superadmin Login
-  const superadminLogin = (email: string, password: string): { success: boolean; message?: string; user?: User } => {
-    const cleanEmail = email.trim().toLowerCase();
-    const superadminUser = users.find(u => u.role === 'superadmin' && u.email.toLowerCase() === cleanEmail);
-
-    if (!superadminUser) {
-      // Allow demo superadmin credentials
-      if (cleanEmail === 'rafi.superadmin@kms.gov.id' || cleanEmail === 'superadmin@kms.id' || cleanEmail === 'admin@kms.gov.id') {
-        const defaultSuper = users.find(u => u.role === 'superadmin') || initialUsers[0];
-        setCurrentUser(defaultSuper);
-        return { success: true, user: defaultSuper };
-      }
-      return { success: false, message: 'Kredensial Superadmin tidak valid atau akun tidak memiliki hak akses platform governance.' };
+  // Dedicated Superadmin Login (password-validated against backend)
+  const superadminLogin = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {
+    if (!password) {
+      return { success: false, message: 'Kata sandi wajib diisi.' };
     }
 
-    setCurrentUser(superadminUser);
-    return { success: true, user: superadminUser };
+    try {
+      const res = await api.auth.superadminLogin({ email: email.trim().toLowerCase(), password });
+      if (!res.success || !res.user) {
+        return { success: false, message: res.message || 'Kredensial Superadmin tidak valid.' };
+      }
+
+      tokenStore.set(res.token);
+      const backendUser = res.user as User;
+
+      setCurrentUser(backendUser);
+      setUsers(prev => {
+        if (prev.some(u => u.id === backendUser.id)) {
+          return prev.map(u => u.id === backendUser.id ? backendUser : u);
+        }
+        return [...prev, backendUser];
+      });
+
+      // Session is now valid: pull fresh protected data for the app shell.
+      refreshBackendData();
+
+      return { success: true, user: backendUser };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Gagal terhubung ke server autentikasi.' };
+    }
   };
 
-  // Register New User
-  const registerUser = (data: { 
-    name: string; 
-    email: string; 
-    password: string; 
-    department: string; 
-    phone?: string; 
-    employeeId?: string; 
-    orgCode?: string 
-  }) => {
-    const cleanEmail = data.email.trim().toLowerCase();
-    const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
-    if (existing) {
-      return { success: false, message: 'Email sudah terdaftar. Silakan masuk menggunakan akun tersebut.', requiresOrgJoin: false };
-    }
+  // Register New User (persisted to MySQL backend with bcrypt hash + JWT)
+  const registerUser = async (data: {
+    name: string;
+    email: string;
+    password: string;
+    department: string;
+    phone?: string;
+    employeeId?: string;
+    orgCode?: string
+  }): Promise<{ success: boolean; message: string; user?: User; requiresOrgJoin: boolean }> => {
+    try {
+      const res = await api.auth.register({
+        name: data.name,
+        email: data.email.trim().toLowerCase(),
+        password: data.password,
+        phone: data.phone,
+        employeeId: data.employeeId,
+        orgCode: data.orgCode
+      });
 
-    const initials = data.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'US';
-    const newId = `user-reg-${Date.now()}`;
-
-    let matchedOrg: Organization | null = null;
-    let orgStatus: 'joined' | 'pending' | 'none' = 'none';
-
-    if (data.orgCode) {
-      const cleanInput = data.orgCode.trim().toLowerCase();
-      const foundOrg = organizations.find(o => o.code.toLowerCase() === cleanInput || o.id.toLowerCase() === cleanInput);
-      if (foundOrg) {
-        matchedOrg = foundOrg;
-        orgStatus = 'joined';
+      if (!res.success || !res.user) {
+        return { success: false, message: res.message || 'Registrasi gagal.', requiresOrgJoin: false };
       }
+
+      tokenStore.set(res.token);
+      const backendUser = res.user as User;
+
+      setCurrentUser(backendUser);
+      setUsers(prev => {
+        if (prev.some(u => u.id === backendUser.id)) return prev;
+        return [...prev, backendUser];
+      });
+
+      const log: ActivityLog = {
+        id: `act-${Date.now()}`,
+        organizationId: backendUser.organizationId,
+        organizationName: backendUser.organizationName,
+        actorName: backendUser.name,
+        actorRole: 'user',
+        action: 'Registrasi Akun Baru',
+        target: backendUser.organizationId ? 'Bergabung ke organisasi' : 'Menunggu Gabung Organisasi',
+        timestamp: 'Baru saja',
+        type: 'user'
+      };
+      setActivityLogs(prev => [log, ...prev]);
+
+      // Session is now valid: pull fresh protected data for the app shell.
+      refreshBackendData();
+
+      return {
+        success: true,
+        message: res.message || 'Registrasi berhasil!',
+        user: backendUser,
+        requiresOrgJoin: res.requiresOrgJoin
+      };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Gagal terhubung ke server pendaftaran.', requiresOrgJoin: false };
     }
-
-    const newUser: User = {
-      id: newId,
-      name: data.name,
-      email: cleanEmail,
-      role: 'user',
-      organizationId: matchedOrg ? matchedOrg.id : null,
-      organizationName: matchedOrg ? matchedOrg.name : null,
-      department: data.department || 'Umum',
-      status: 'active',
-      joinedAt: new Date().toISOString().split('T')[0],
-      avatarInitials: initials,
-      phone: data.phone,
-      employeeId: data.employeeId,
-      orgJoinStatus: orgStatus
-    };
-
-    setUsers(prev => [...prev, newUser]);
-    setCurrentUser(newUser);
-
-    if (matchedOrg) {
-      setOrganizations(prev => prev.map(o => o.id === matchedOrg!.id ? { ...o, usersCount: o.usersCount + 1 } : o));
-    }
-
-    const log: ActivityLog = {
-      id: `act-${Date.now()}`,
-      organizationId: matchedOrg ? matchedOrg.id : null,
-      organizationName: matchedOrg ? matchedOrg.name : null,
-      actorName: data.name,
-      actorRole: 'user',
-      action: 'Registrasi Akun Baru',
-      target: matchedOrg ? `Bergabung ke ${matchedOrg.name}` : 'Menunggu Gabung Organisasi',
-      timestamp: 'Baru saja',
-      type: 'user'
-    };
-    setActivityLogs(prev => [log, ...prev]);
-
-    return { 
-      success: true, 
-      message: 'Registrasi berhasil!', 
-      user: newUser,
-      requiresOrgJoin: !matchedOrg 
-    };
   };
 
   // Logout
   const logout = () => {
     setCurrentUser(null);
+    tokenStore.clear();
     localStorage.removeItem('kms_current_user');
   };
 
@@ -458,8 +551,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       api.membership.join(currentUser.id, targetOrg.id).catch(e => console.error('[BACKEND JOIN ORG ERROR]', e));
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `Selamat! Anda berhasil bergabung ke organisasi ${targetOrg.name}.`
     };
   };
@@ -512,30 +605,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Add Organization - Enforces strictly 1 Organization per Admin
+  // Add Project / Organization - Available for any logged-in user to create their project
   const addOrganization = (newOrgData: Omit<Organization, 'id' | 'documentsCount' | 'usersCount' | 'chunksCount' | 'aiQueriesCount' | 'storageUsedMb' | 'createdAt'>): { success: boolean; message: string; org?: Organization } => {
-    // Check role authorization
-    if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'superadmin') {
-      return { 
-        success: false, 
-        message: 'Hak akses ditolak. Hanya akun Admin atau Superadmin yang diizinkan mendaftarkan organisasi.' 
-      };
-    }
-
-    // Strictly enforce 1 organization per admin
-    if (currentUser?.role === 'admin' && currentUser.organizationId) {
-      return { 
-        success: false, 
-        message: 'Admin hanya dapat memiliki dan mengelola 1 organisasi. Anda harus menghapus organisasi yang aktif terlebih dahulu jika ingin membuat organisasi baru.' 
-      };
-    }
-
     // Check unique code
     const existingWithCode = organizations.find(o => o.code.toLowerCase() === newOrgData.code.trim().toLowerCase());
     if (existingWithCode) {
       return {
         success: false,
-        message: `Kode organisasi "${newOrgData.code}" sudah digunakan oleh ${existingWithCode.name}. Silakan gunakan kode unik lain.`
+        message: `Kode project "${newOrgData.code}" sudah digunakan oleh ${existingWithCode.name}. Silakan gunakan kode unik lain.`
       };
     }
 
@@ -547,43 +624,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       usersCount: 1,
       chunksCount: 0,
       aiQueriesCount: 0,
-      storageUsedMb: 120,
+      storageUsedMb: 0,
       createdAt: new Date().toISOString().split('T')[0]
     };
 
-    // If current logged-in user is an admin, assign this 1 organization to them
-    if (currentUser && currentUser.role === 'admin') {
+    if (currentUser) {
       newOrg.adminId = currentUser.id;
       newOrg.adminName = currentUser.name;
       newOrg.adminEmail = currentUser.email;
 
-      const updatedCurrentAdmin: User = {
+      const updatedUser: User = {
         ...currentUser,
         organizationId: newId,
         organizationName: newOrg.name,
         orgJoinStatus: 'joined'
       };
-      setCurrentUser(updatedCurrentAdmin);
-      setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedCurrentAdmin : u));
-    } else {
-      // Superadmin creating org with a designated admin
-      const adminName = newOrgData.adminName || 'Admin ' + newOrgData.name;
-      const adminEmail = newOrgData.adminEmail || `admin@${newOrgData.code.toLowerCase().replace(/[^a-z0-9]/g, '')}.co.id`;
-      const initials = adminName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      const newAdminUser: User = {
-        id: `user-admin-${Date.now()}`,
-        name: adminName,
-        email: adminEmail,
-        role: 'admin',
-        organizationId: newId,
-        organizationName: newOrg.name,
-        department: 'Manajemen Pengetahuan Organisasi',
-        status: 'active',
-        joinedAt: new Date().toISOString().split('T')[0],
-        avatarInitials: initials || 'AD',
-        orgJoinStatus: 'joined'
-      };
-      setUsers(prev => [...prev, newAdminUser]);
+      setCurrentUser(updatedUser);
+      localStorage.setItem('kms_current_user', JSON.stringify(updatedUser));
+      setActiveProjectId(newId);
+      localStorage.setItem('kms_active_project_id', newId);
+      setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
     }
 
     setOrganizations(prev => [newOrg, ...prev]);
@@ -593,16 +653,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...newOrgData,
       adminName: newOrg.adminName,
       creatorId: currentUser?.id,
-      creatorRole: currentUser?.role
-    }).catch(e => console.error('[BACKEND CREATE ORG ERROR]', e));
+      creatorRole: currentUser?.role || 'admin'
+    }).catch(e => console.error('[BACKEND CREATE PROJECT ERROR]', e));
 
     const newLog: ActivityLog = {
       id: `act-${Date.now()}`,
       organizationId: newId,
       organizationName: newOrg.name,
-      actorName: currentUser ? currentUser.name : 'Superadmin',
-      actorRole: currentUser ? currentUser.role : 'superadmin',
-      action: 'Membuat Organisasi Baru (Kebijakan 1 Admin = 1 Org)',
+      actorName: currentUser ? currentUser.name : 'Pengguna',
+      actorRole: currentUser ? currentUser.role : 'user',
+      action: 'Membuat Project Baru',
       target: `${newOrg.name} (${newOrg.type})`,
       timestamp: 'Baru saja',
       type: 'organization'
@@ -611,7 +671,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: true,
-      message: `Organisasi ${newOrg.name} berhasil dibuat!`,
+      message: `Project "${newOrg.name}" berhasil dibuat dan siap digunakan!`,
       org: newOrg
     };
   };
@@ -623,11 +683,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Organisasi tidak ditemukan.' };
     }
 
-    // Permission: Superadmin OR the Admin owning this org
-    const isOwnerAdmin = currentUser?.role === 'admin' && (currentUser.organizationId === orgId || targetOrg.adminId === currentUser.id);
-    const isSuperadmin = currentUser?.role === 'superadmin';
+    // Permission: Admin, Superadmin, or User
+    const isOwner = currentUser?.organizationId === orgId || targetOrg.adminId === currentUser?.id;
+    const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'user' || isOwner;
 
-    if (!isSuperadmin && !isOwnerAdmin) {
+    if (!isAuthorized) {
       return { success: false, message: 'Anda tidak memiliki hak akses untuk menghapus organisasi ini.' };
     }
 
@@ -715,8 +775,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     tags: string[];
     summary: string;
     organizationId?: string;
-  }): Promise<DocumentItem> => {
-    const targetOrgId = docData.organizationId || currentUser?.organizationId || 'org-pam-jaya';
+  }, file?: File): Promise<DocumentItem> => {
+    const targetOrgId = docData.organizationId || activeProjectId || currentUser?.organizationId || (organizations[0]?.id || 'org-project');
     const targetOrg = organizations.find(o => o.id === targetOrgId) || organizations[0];
     const newDocId = `doc-${Date.now()}`;
 
@@ -728,6 +788,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       organizationName: targetOrg.name,
       title: docData.title,
       category: docData.category,
+      repositoryType: (docData as any).repositoryType || 'document',
       year: docData.year,
       fileType: docData.fileType,
       fileSizeKb: docData.fileSizeKb,
@@ -770,19 +831,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     ];
 
-    setDocuments(prev => [newDoc, ...prev]);
-    setChunks(prev => [...newChunksList, ...prev]);
-
-    // Persist document to MySQL Backend
+    // Persist document to MySQL Backend with optional actual file
     const fd = new FormData();
+    fd.append('id', newDocId);
     fd.append('title', docData.title);
     fd.append('category', docData.category);
+    fd.append('repositoryType', (docData as any).repositoryType || 'document');
     fd.append('year', String(docData.year));
     fd.append('organizationId', targetOrg.id);
     fd.append('notes', docData.summary);
     fd.append('uploadedBy', currentUser ? currentUser.name : 'Admin');
     fd.append('uploadedById', currentUser ? currentUser.id : '');
-    api.documents.upload(fd).catch(e => console.error('[BACKEND UPLOAD DOC ERROR]', e));
+    if (file) {
+      fd.append('file', file);
+    }
+
+    try {
+      const res = await api.documents.upload(fd);
+      if (res.success && res.document) {
+        if (res.document.fileUrl) {
+          newDoc.fileUrl = res.document.fileUrl;
+        }
+        if (res.document.id) {
+          newDoc.id = res.document.id;
+        }
+      }
+    } catch (e: any) {
+      console.error('[BACKEND UPLOAD DOC ERROR]', e);
+      // Surface the failure to the caller (e.g. 401 expired session, network down)
+      throw new Error(e?.message || 'Gagal menyimpan dokumen ke server. Silakan login ulang lalu coba lagi.');
+    }
+
+    setDocuments(prev => [newDoc, ...prev]);
+    setChunks(prev => [...newChunksList, ...prev]);
 
     setOrganizations(prev => prev.map(o => {
       if (o.id === targetOrg.id) {
@@ -802,8 +883,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       organizationName: targetOrg.name,
       actorName: currentUser ? currentUser.name : 'Admin',
       actorRole: currentUser?.role || 'admin',
-      action: 'Unggah & Ekstraksi Dokumen',
-      target: `${docData.title} (${generatedChunksCount} chunks diindeks)`,
+      action: 'Unggah Dokumen Baru',
+      target: `${docData.title} (${Math.round(docData.fileSizeKb / 1024 * 10) / 10} MB)`,
       timestamp: 'Baru saja',
       type: 'document'
     };
@@ -851,8 +932,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Add User
   const addUser = (userData: Omit<User, 'id' | 'joinedAt' | 'avatarInitials'>) => {
     // Only superadmin can assign 'admin' or 'superadmin' roles; admins can only add regular users
-    const effectiveRole: UserRole = (currentUser?.role === 'superadmin') 
-      ? userData.role 
+    const effectiveRole: UserRole = (currentUser?.role === 'superadmin')
+      ? userData.role
       : 'user';
 
     const initials = userData.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
@@ -925,10 +1006,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Remove User From Organization (Eject member)
   const removeUserFromOrg = (userId: string) => {
     const targetUser = users.find(u => u.id === userId);
-    if (!targetUser || !targetUser.organizationId) return;
+    if (!targetUser) return;
 
     const orgId = targetUser.organizationId;
-    const orgName = targetUser.organizationName;
+    const orgName = targetUser.organizationName || organizations.find(o => o.id === orgId)?.name || 'Organisasi';
+
+    if (!orgId) {
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      api.users.eject(userId).catch(e => console.error('[BACKEND EJECT USER ERROR]', e));
+      return;
+    }
 
     setUsers(prev => prev.map(u => {
       if (u.id === userId) {
@@ -986,22 +1073,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetUser = users.find(u => u.id === userId);
     if (!targetUser) return;
 
-    // If user is promoted to admin, and was only a regular member of someone else's org,
-    // detach them so they have a fresh slot to create their own 1 organization!
-    let resetOrg = false;
-    if (newRole === 'admin' && targetUser.organizationId) {
-      const existingOrg = organizations.find(o => o.id === targetUser.organizationId);
-      if (existingOrg && existingOrg.adminId !== targetUser.id) {
-        resetOrg = true;
-      }
-    }
-
+    // Preserving organization - changing role should NEVER kick user out of their organization
     setUsers(prev => prev.map(u => {
       if (u.id === userId) {
         return {
           ...u,
-          role: newRole,
-          ...(resetOrg ? { organizationId: null, organizationName: null, orgJoinStatus: 'none' as const } : {})
+          role: newRole
         };
       }
       return u;
@@ -1013,22 +1090,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (currentUser && currentUser.id === userId) {
-      setCurrentUser({
-        ...currentUser,
-        role: newRole,
-        ...(resetOrg ? { organizationId: null, organizationName: null, orgJoinStatus: 'none' as const } : {})
-      });
+      setCurrentUser(prev => prev ? {
+        ...prev,
+        role: newRole
+      } : null);
     }
 
     const log: ActivityLog = {
       id: `act-${Date.now()}`,
-      organizationId: resetOrg ? null : (targetUser?.organizationId || null),
-      organizationName: resetOrg ? null : (targetUser?.organizationName || null),
+      organizationId: targetUser?.organizationId || null,
+      organizationName: targetUser?.organizationName || null,
       actorName: currentUser ? currentUser.name : 'Superadmin',
       actorRole: 'superadmin',
-      action: newRole === 'admin' 
-        ? 'Promosi Menjadi Admin (Diberikan Akses Membuat 1 Organisasi)' 
-        : 'Penyesuaian Hak Akses Menjadi User Biasa',
+      action: newRole === 'admin'
+        ? 'Promosi Menjadi Admin Organisasi'
+        : 'Penyesuaian Hak Akses Menjadi Anggota / User',
       target: targetUser ? targetUser.name : userId,
       timestamp: 'Baru saja',
       type: 'user'
@@ -1036,31 +1112,149 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs(prev => [log, ...prev]);
   };
 
+  // Set user account status (suspend / re-activate) - admin & superadmin only
+  const setUserStatus = (userId: string, status: 'active' | 'inactive') => {
+    if (currentUser?.role !== 'superadmin' && currentUser?.role !== 'admin') {
+      console.warn('Wewenang ditolak: Hanya Admin/Superadmin yang dapat mengubah status akun.');
+      return;
+    }
+
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    // Safety guards: never suspend own account or a superadmin account
+    if (targetUser.id === currentUser.id || targetUser.role === 'superadmin') return;
+    if (currentUser.role === 'admin' && targetUser.organizationId !== currentUser.organizationId) return;
+
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, status } : u)));
+
+    // Persist to MySQL Backend
+    api.users.setStatus(userId, status).catch(e => console.error('[BACKEND SET STATUS ERROR]', e));
+
+    const newLog: ActivityLog = {
+      id: `act-${Date.now()}`,
+      organizationId: targetUser.organizationId || null,
+      organizationName: targetUser.organizationName || null,
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      action: status === 'inactive' ? 'Menonaktifkan Akun Anggota' : 'Mengaktifkan Kembali Akun Anggota',
+      target: targetUser.name,
+      timestamp: 'Baru saja',
+      type: 'user'
+    };
+    setActivityLogs(prev => [newLog, ...prev]);
+  };
+
+  // Reset a member's password (admin sets a new temporary password)
+  const resetUserPassword = async (userId: string, newPassword: string): Promise<boolean> => {
+    if (currentUser?.role !== 'superadmin' && currentUser?.role !== 'admin') return false;
+
+    const targetUser = users.find(u => u.id === userId);
+
+    try {
+      await api.users.resetPassword(userId, newPassword);
+
+      if (targetUser) {
+        const newLog: ActivityLog = {
+          id: `act-${Date.now()}`,
+          organizationId: targetUser.organizationId || null,
+          organizationName: targetUser.organizationName || null,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          action: 'Reset Kata Sandi Anggota',
+          target: targetUser.name,
+          timestamp: 'Baru saja',
+          type: 'user'
+        };
+        setActivityLogs(prev => [newLog, ...prev]);
+      }
+      return true;
+    } catch (e: any) {
+      console.error('[RESET USER PASSWORD ERROR]', e);
+      throw new Error(e?.message || 'Gagal mereset kata sandi pengguna.');
+    }
+  };
+
+  // Delete a user account permanently (admin & superadmin only)
+  const deleteUser = (userId: string) => {
+    if (currentUser?.role !== 'superadmin' && currentUser?.role !== 'admin') {
+      console.warn('Wewenang ditolak: Hanya Admin/Superadmin yang dapat menghapus akun.');
+      return;
+    }
+
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    // Safety guards: never delete own account or a superadmin account
+    if (targetUser.id === currentUser.id || targetUser.role === 'superadmin') return;
+    if (currentUser.role === 'admin' && targetUser.organizationId !== currentUser.organizationId) return;
+
+    // Optimistic UI update, then persist to MySQL backend
+    setUsers(prev => prev.filter(u => u.id !== userId));
+
+    if (targetUser.organizationId) {
+      setOrganizations(prev => prev.map(o =>
+        o.id === targetUser.organizationId
+          ? { ...o, usersCount: Math.max(0, o.usersCount - 1) }
+          : o
+      ));
+    }
+
+    api.users.delete(userId).catch(e => console.error('[BACKEND DELETE USER ERROR]', e));
+
+    const newLog: ActivityLog = {
+      id: `act-${Date.now()}`,
+      organizationId: targetUser.organizationId || null,
+      organizationName: targetUser.organizationName || null,
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      action: 'Menghapus Akun Anggota',
+      target: targetUser.name,
+      timestamp: 'Baru saja',
+      type: 'user'
+    };
+    setActivityLogs(prev => [newLog, ...prev]);
+  };
+
   // Approve Join Request
   const approveJoinRequest = (requestId: string) => {
     const req = joinRequests.find(r => r.id === requestId);
     if (!req) return;
 
-    setJoinRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r));
+    // Optimistic UI update, then persist to MySQL backend
+    setJoinRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'approved' as const } : r));
 
-    const targetOrg = organizations.find(o => o.code === req.organizationCode || o.name.toLowerCase().includes(req.organizationName.toLowerCase())) || organizations[0];
-    const initials = req.applicantName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const targetOrg = organizations.find(
+      o => o.id === req.organizationId || o.code === req.organizationCode || o.name.toLowerCase().includes(req.organizationName.toLowerCase())
+    ) || organizations[0];
 
-    const newUser: User = {
-      id: `user-approved-${Date.now()}`,
-      name: req.applicantName,
-      email: req.applicantEmail,
-      role: 'user',
-      organizationId: targetOrg.id,
-      organizationName: targetOrg.name,
-      department: req.department,
-      status: 'active',
-      joinedAt: new Date().toISOString().split('T')[0],
-      avatarInitials: initials,
-      orgJoinStatus: 'joined'
-    };
+    if (req.userId) {
+      setUsers(prev => prev.map(u => u.id === req.userId
+        ? { ...u, organizationId: targetOrg.id, organizationName: targetOrg.name, orgJoinStatus: 'joined' as const }
+        : u
+      ));
+      if (currentUser && currentUser.id === req.userId) {
+        setCurrentUser({ ...currentUser, organizationId: targetOrg.id, organizationName: targetOrg.name, orgJoinStatus: 'joined' });
+      }
+    } else {
+      // Legacy request without user account: create a local user record
+      const initials = req.applicantName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+      const newUser: User = {
+        id: `user-approved-${Date.now()}`,
+        name: req.applicantName,
+        email: req.applicantEmail,
+        role: 'user',
+        organizationId: targetOrg.id,
+        organizationName: targetOrg.name,
+        department: req.department,
+        status: 'active',
+        joinedAt: new Date().toISOString().split('T')[0],
+        avatarInitials: initials,
+        orgJoinStatus: 'joined'
+      };
+      setUsers(prev => [...prev, newUser]);
+    }
 
-    setUsers(prev => [...prev, newUser]);
     setOrganizations(prev => prev.map(o => o.id === targetOrg.id ? { ...o, usersCount: o.usersCount + 1 } : o));
 
     const log: ActivityLog = {
@@ -1075,11 +1269,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'user'
     };
     setActivityLogs(prev => [log, ...prev]);
+
+    api.membership.approve(requestId).catch(e => console.error('[BACKEND APPROVE REQUEST ERROR]', e));
   };
 
   // Reject Join Request
   const rejectJoinRequest = (requestId: string) => {
-    setJoinRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+    setJoinRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' as const } : r));
+    api.membership.reject(requestId).catch(e => console.error('[BACKEND REJECT REQUEST ERROR]', e));
   };
 
   // Submit Join Request from Public Screen
@@ -1091,8 +1288,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newReq: JoinRequest = {
       id: `req-${Date.now()}`,
+      organizationId: org.id,
       organizationCode: org.code,
       organizationName: org.name,
+      userId: currentUser?.id || null,
       applicantName: name,
       applicantEmail: email,
       department: dept,
@@ -1102,6 +1301,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setJoinRequests(prev => [newReq, ...prev]);
+
+    // Persist to backend (userId may be null for public submissions)
+    if (currentUser?.id) {
+      api.membership.join(currentUser.id, org.id, reason, dept)
+        .then(res => {
+          if (res.success && res.requestId) {
+            setJoinRequests(prev => prev.map(r => r.id === newReq.id ? { ...r, id: res.requestId! } : r));
+          }
+        })
+        .catch(e => console.error('[BACKEND SUBMIT REQUEST ERROR]', e));
+    }
+
     return { success: true, message: `Permintaan bergabung ke ${org.name} berhasil diajukan. Status saat ini: Pending approval oleh Admin.` };
   };
 
@@ -1110,116 +1321,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRagConfig(prev => ({ ...prev, ...newConfig }));
   };
 
+  function cleanRagResponseText(text: string): string {
+    if (!text) return '';
+    let cleaned = text;
+    const tokenDict: Record<string, string> = {
+      '其余': 'lainnya',
+      '提交': 'menyampaikan',
+      '多位': 'beragam',
+      'وعة': '',
+      'Diesel多位kan': 'Dioptimalkan',
+      '多位kan': 'kan',
+    };
+    for (const [k, v] of Object.entries(tokenDict)) {
+      cleaned = cleaned.split(k).join(v);
+    }
+    cleaned = cleaned.replace(/[\u4e00-\u9fff\u0600-\u06ff]/g, '');
+    cleaned = cleaned.replace(/chunk\s*\d+\s*\(p?(\d+)\)/gi, 'Halaman $1');
+    cleaned = cleaned.replace(/chunk\s*0*(\d+)/gi, 'Bagian $1');
+    cleaned = cleaned.replace(/chunkOTHER/gi, 'bagian lainnya');
+    cleaned = cleaned.replace(/\bchunk\b/gi, 'bagian dokumen');
+    cleaned = cleaned.replace(/\bchunks\b/gi, 'bagian dokumen');
+    cleaned = cleaned.replace(/\b(?:di|pada)\s+context\b/gi, 'dalam dokumen');
+    cleaned = cleaned.replace(/\bcontext\b/gi, 'dokumen');
+    cleaned = cleaned.replace(/Halaman\s*lainnya\s*tidak ada (?:di\s*)?dalam dokumen/gi, 'Halaman lainnya tidak memuat rincian tersebut.');
+    return cleaned.trim();
+  }
+
   // Send Chat Message with Context-Aware RAG Retrieval
-  const sendChatMessage = async (question: string) => {
+  const sendChatMessage = async (question: string, overrideOrgId?: string) => {
+    const targetOrgId = overrideOrgId || currentOrganization?.id || (currentUser?.role !== 'superadmin' ? currentUser?.organizationId : null);
+    const orgIdKey = targetOrgId || 'global';
+
     const userMsgId = `msg-u-${Date.now()}`;
     const userMsg: ChatMessage = {
       id: userMsgId,
       sender: 'user',
       text: question,
       timestamp: 'Baru saja',
-      organizationId: currentUser?.organizationId || 'all'
+      organizationId: orgIdKey
     };
 
     setChatMessages(prev => [...prev, userMsg]);
 
-    const targetPool = (currentUser?.role === 'superadmin' || !currentUser?.organizationId)
-      ? chunks 
-      : chunks.filter(c => c.organizationId === currentUser?.organizationId);
-
-    // Clean query words (remove punctuation like '?' so 'internal?' matches 'internal')
-    const qClean = question.toLowerCase().replace(/[^\w\s]/g, ' ');
-    const words = qClean.split(/\s+/).filter(w => w.length > 2);
-
-    const scoredChunks = targetPool.map(chunk => {
-      let score = 0.50;
-      const contentLower = chunk.content.toLowerCase();
-      const titleLower = chunk.documentTitle.toLowerCase();
-      const sectionLower = chunk.sectionTitle.toLowerCase();
-
-      words.forEach(word => {
-        if (contentLower.includes(word)) score += 0.15;
-        if (titleLower.includes(word)) score += 0.20;
-        if (sectionLower.includes(word)) score += 0.15;
-      });
-
-      return {
-        chunk,
-        score: Math.min(0.98, score)
-      };
-    }).sort((a, b) => b.score - a.score);
-
-    const relevantMatches = scoredChunks.filter(item => item.score > 0.65).slice(0, 2);
+    const startTime = performance.now();
 
     let answerText = '';
-    const orgName = currentOrganization?.name || currentUser?.organizationName || 'Organisasi';
+    let citations: CitationReference[] = [];
+    let isGrounded = false;
+    let modelName = 'space-bunny-free';
 
-    if (relevantMatches.length > 0) {
-      const topChunk = relevantMatches[0].chunk;
-      const additionalChunk = relevantMatches[1] && relevantMatches[1].score > 0.68 ? relevantMatches[1].chunk : null;
+    try {
+      // 1. Call real RAG backend service
+      const ragResponse = await api.chat.query({
+        query: question,
+        organizationId: targetOrgId
+      });
 
-      answerText = `${topChunk.content}` + 
-        (additionalChunk ? `\n\n${additionalChunk.content}` : '');
-    } else {
-      // Intelligent Organizational Knowledge Synthesizer
-      const isAturanKerja = words.some(w => ['aturan', 'kerja', 'kebijakan', 'internal', 'tertib', 'disiplin', 'etika', 'cuti', 'izin', 'absen', 'presensi', 'jam'].includes(w));
-      const isSOP = words.some(w => ['sop', 'prosedur', 'operasional', 'layanan', 'langkah', 'teknis', 'pelaksanaan'].includes(w));
-      const isPersetujuan = words.some(w => ['persetujuan', 'approval', 'pengajuan', 'memo', 'tanda', 'tangan', 'otorisasi', 'hierarki'].includes(w));
-      const isVisi = words.some(w => ['visi', 'misi', 'profil', 'tentang', 'tujuan', 'fungsi'].includes(w));
+      if (ragResponse.success && ragResponse.answer) {
+        answerText = cleanRagResponseText(ragResponse.answer);
+        isGrounded = ragResponse.grounded;
+        modelName = ragResponse.model || 'space-bunny-free';
 
-      if (isAturanKerja) {
-        answerText = `Berikut adalah ringkasan aturan kerja dan kebijakan internal yang berlaku di lingkungan **${orgName}**:\n\n` +
-          `1. **Hari & Jam Kerja**: Hari kerja operasional adalah Senin hingga Jumat, pukul 08.00 – 17.00 WIB dengan kewajiban pencatatan kehadiran tepat waktu.\n` +
-          `2. **Integritas & Kode Etik**: Setiap anggota wajib menjaga profesionalisme, kejujuran, transparansi, serta kerahasiaan data operasional dan arsip organisasi.\n` +
-          `3. **Pengajuan Cuti & Izin**: Permohonan cuti tahunan diajukan paling lambat 3 hari kerja sebelum pelaksanaan melalui atasan langsung dan disetujui divisi SDM/Kepegawaian.\n` +
-          `4. **Kepatuhan Terhadap SOP**: Setiap penugasan teknis dan administratif wajib dijalankan sesuai pedoman SOP resmi yang telah diindeks dalam sistem KMS.\n` +
-          `5. **Keselamatan & Ketertiban Kerja (K3)**: Penerapan standar K3 di seluruh fasilitas kerja guna mewujudkan lingkungan kerja yang aman, sehat, dan produktif.`;
-      } else if (isSOP) {
-        answerText = `Standar Operasional Prosedur (SOP) di lingkungan **${orgName}** dilaksanakan melalui tahapan berjenjang:\n\n` +
-          `1. **Penerimaan Tugas / Layanan**: Pekerjaan dimulai berdasarkan disposisi pimpinan atau tiket permohonan resmi.\n` +
-          `2. **Pemeriksaan Kelengkapan**: Verifikasi kelengkapan dokumen dan kriteria teknis sesuai checklist SOP.\n` +
-          `3. **Pelaksanaan Kerja**: Eksekusi penugasan teknis dengan mengacu pada target waktu penyelesaian (SLA) yang telah ditetapkan.\n` +
-          `4. **Validasi & Arsip**: Hasil akhir diverifikasi oleh penanggung jawab teknis dan diarsipkan secara digital ke dalam KMS.`;
-      } else if (isPersetujuan) {
-        answerText = `Alur persetujuan dokumen resmi di **${orgName}** mengikuti mekanisme otoritas berjenjang:\n\n` +
-          `1. **Penyusunan Konsep**: Pembuatan draft nota dinas atau surat dinas oleh staf/unit inisiator.\n` +
-          `2. **Paraf Koordinasi**: Pemeriksaan substansi dan pemberian paraf bertingkat dari Kepala Seksi hingga Manajer terkait.\n` +
-          `3. **Penomoran Arsip**: Registrasi nomor surat dan klasifikasi arsip oleh bagian kesekretariatan.\n` +
-          `4. **Persetujuan / Pengesahan**: Penandatanganan akhir oleh Pimpinan / Direksi sebelum dokumen didistribusikan.`;
-      } else if (isVisi && currentOrganization?.description) {
-        answerText = `**Profil Singkat ${orgName}**:\n\n` +
-          `${currentOrganization.description}\n\n` +
-          `• **Jenis BUMD**: ${currentOrganization.type}\n` +
-          `• **Wilayah Layanan**: ${currentOrganization.city}, ${currentOrganization.province}\n` +
-          `• **Fokus**: Menyelenggarakan layanan publik yang prima, andal, dan berkelanjutan bagi masyarakat.`;
+        if (Array.isArray(ragResponse.sources)) {
+          citations = ragResponse.sources.map((s, idx) => ({
+            chunkId: s.chunk_id || `chunk-${idx}`,
+            documentTitle: s.document_name,
+            page: s.page || 1,
+            similarityScore: s.score || 0.95,
+            snippet: s.section || s.document_name,
+            documentId: s.document_id
+          }));
+        }
       } else {
-        answerText = `Berdasarkan pedoman operasional di lingkungan **${orgName}**:\n\n` +
-          `Terkait *" ${question} "*:\n` +
-          `Pelaksanaan tugas dan pengelolaan informasi selalu mengedepankan asas kepatuhan terhadap SOP, transparansi data, dan akuntabilitas kerja. Apabila membutuhkan petunjuk teknis spesifik perihal dokumen terbaru, Anda dapat berkoordinasi dengan pengelola knowledge base atau mengunggah dokumen pedoman terkait ke dalam sistem.`;
+        throw new Error(ragResponse.error || 'RAG query returned empty');
       }
+    } catch (ragError: any) {
+      console.warn('[RAG CHAT ERROR]', ragError);
+      answerText = `Mohon maaf, layanan AI saat ini sedang tidak dapat memproses jawaban (${ragError?.message || 'Kendala koneksi'}). Silakan coba beberapa saat lagi.`;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 450));
+    const latencyMs = Math.round(performance.now() - startTime);
 
     const assistantMsg: ChatMessage = {
       id: `msg-a-${Date.now()}`,
       sender: 'assistant',
       text: answerText,
       timestamp: 'Baru saja',
-      organizationId: currentUser?.organizationId || 'all',
-      retrievalLatencyMs: 240
+      organizationId: orgIdKey,
+      sources: citations,
+      citations: citations,
+      grounded: isGrounded,
+      model: modelName,
+      retrievalLatencyMs: latencyMs,
+      responseTimeMs: latencyMs
     };
 
     setChatMessages(prev => [...prev, assistantMsg]);
 
-    if (currentUser?.organizationId) {
-      setOrganizations(prev => prev.map(o => o.id === currentUser.organizationId ? { ...o, aiQueriesCount: o.aiQueriesCount + 1 } : o));
+    if (targetOrgId) {
+      setOrganizations(prev => prev.map(o => o.id === targetOrgId ? { ...o, aiQueriesCount: o.aiQueriesCount + 1 } : o));
     }
 
+    const targetOrg = organizations.find(o => o.id === targetOrgId);
     const log: ActivityLog = {
       id: `act-${Date.now()}`,
-      organizationId: currentUser?.organizationId || null,
-      organizationName: currentUser?.organizationName || null,
+      organizationId: targetOrgId || null,
+      organizationName: targetOrg?.name || currentUser?.organizationName || null,
       actorName: currentUser ? currentUser.name : 'Pengguna',
       actorRole: currentUser?.role || 'user',
       action: 'Pertanyaan RAG AI',
@@ -1230,14 +1437,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs(prev => [log, ...prev]);
   };
 
-  const clearChatHistory = () => {
-    setChatMessages([
+  const clearChatHistory = (targetOrgId?: string) => {
+    const orgIdKey = targetOrgId || currentOrganization?.id || (currentUser?.role !== 'superadmin' ? currentUser?.organizationId : null) || 'global';
+    const targetOrg = organizations.find(o => o.id === orgIdKey);
+    const orgName = targetOrg?.name || 'organisasi ini';
+
+    setChatMessages(prev => [
+      ...prev.filter(m => m.organizationId !== orgIdKey && m.organizationId !== 'all'),
       {
         id: `msg-init-${Date.now()}`,
         sender: 'assistant',
-        text: 'Riwayat percakapan telah dibersihkan. Silakan ajukan pertanyaan baru seputar dokumen dan SOP organisasi Anda.',
+        text: `Riwayat percakapan untuk ${orgName} telah dibersihkan. Silakan ajukan pertanyaan baru seputar dokumen dan SOP resmi.`,
         timestamp: 'Baru saja',
-        organizationId: currentUser?.organizationId || 'all'
+        organizationId: orgIdKey
       }
     ]);
   };
@@ -1269,6 +1481,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ragConfig,
       chatMessages,
       currentOrganization,
+      currentProject,
+      projects,
+      activeProjectId,
+      switchProject,
       accessibleDocuments,
       accessibleChunks,
       login,
@@ -1294,6 +1510,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       editUser,
       removeUserFromOrg,
       updateUserRole,
+      setUserStatus,
+      resetUserPassword,
+      deleteUser,
+      refreshBackendData,
       mobileMenuOpen,
       setMobileMenuOpen,
       selectedDocForViewer,

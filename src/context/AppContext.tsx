@@ -673,6 +673,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Persist to MySQL Backend
     api.organizations.create({
+      id: newId,
       ...newOrgData,
       knowledgeBase: finalKb,
       adminName: newOrg.adminName,
@@ -704,7 +705,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteOrganization = (orgId: string): { success: boolean; message: string } => {
     const targetOrg = organizations.find(o => o.id === orgId);
     if (!targetOrg) {
-      return { success: false, message: 'Organisasi tidak ditemukan.' };
+      return { success: false, message: 'Proyek tidak ditemukan.' };
     }
 
     // Permission: Admin, Superadmin, or User
@@ -712,7 +713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'user' || isOwner;
 
     if (!isAuthorized) {
-      return { success: false, message: 'Anda tidak memiliki hak akses untuk menghapus organisasi ini.' };
+      return { success: false, message: 'Anda tidak memiliki hak akses untuk menghapus proyek ini.' };
     }
 
     // 1. Remove org from organizations list
@@ -864,7 +865,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fd.append('category', docData.category);
     fd.append('repositoryType', (docData as any).repositoryType || 'document');
     fd.append('year', String(docData.year));
-    fd.append('organizationId', targetOrg.id);
+    fd.append('organizationId', targetOrg ? targetOrg.id : (targetOrgId || ''));
+    if (targetOrg?.code) {
+      fd.append('projectCode', targetOrg.code);
+    }
+    if (targetOrg?.name) {
+      fd.append('projectName', targetOrg.name);
+    }
     fd.append('notes', docData.summary);
     fd.append('uploadedBy', currentUser ? currentUser.name : 'Admin');
     fd.append('uploadedById', currentUser ? currentUser.id : '');
@@ -882,11 +889,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (res.document.id) {
           newDoc.id = res.document.id;
         }
+        if (res.document.organizationId) {
+          newDoc.organizationId = res.document.organizationId;
+        }
       }
     } catch (e: any) {
       console.error('[BACKEND UPLOAD DOC ERROR]', e);
-      // Surface the failure to the caller (e.g. 401 expired session, network down)
-      throw new Error(e?.message || 'Gagal menyimpan dokumen ke server. Silakan login ulang lalu coba lagi.');
+      // Surface the failure to the caller without the word "organisasi"
+      const rawErrMsg = e?.message || 'Gagal menyimpan dokumen ke server. Silakan coba lagi.';
+      const cleanErrMsg = rawErrMsg.replace(/organisasi/gi, 'proyek');
+      throw new Error(cleanErrMsg);
     }
 
     setDocuments(prev => [newDoc, ...prev]);

@@ -62,6 +62,7 @@ export interface RagQueryResult {
   usage?: any;
   model?: string;
   error?: string;
+  attachments?: any[];
 }
 
 /**

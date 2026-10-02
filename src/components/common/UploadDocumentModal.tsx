@@ -222,16 +222,19 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
 
         setQueuedFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'completed' } : f));
       } catch (err: any) {
-        lastErrorMessage = err?.message || 'Gagal mengunggah berkas.';
+        const rawMsg = err?.message || 'Gagal mengunggah berkas.';
+        const cleanMsg = rawMsg.replace(/organisasi/gi, 'proyek');
+        lastErrorMessage = cleanMsg;
         console.error(`[UPLOAD ERROR: ${item.file.name}]`, err);
-        setQueuedFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', errorMessage: err?.message || 'Gagal unggah' } : f));
+        setQueuedFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', errorMessage: cleanMsg } : f));
       }
     }
 
     if (completed > 0) {
       setProcessState('completed');
     } else {
-      setUploadError(lastErrorMessage || 'Seluruh berkas gagal diunggah. Pastikan format berkas didukung dan ukuran di bawah 50MB.');
+      const cleanErr = (lastErrorMessage || 'Seluruh berkas gagal diunggah. Pastikan format berkas didukung dan ukuran di bawah 50MB.').replace(/organisasi/gi, 'proyek');
+      setUploadError(cleanErr);
       setProcessState('error');
     }
   };

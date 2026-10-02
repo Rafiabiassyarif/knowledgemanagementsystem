@@ -119,6 +119,8 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
               tags: ['cdn', isImg ? 'photo' : 'document', 'kroombox'],
               notes: 'Tersimpan di Edge CDN',
               uploadedBy: 'CDN Storage',
+              uploadedById: null,
+              uploaderRole: 'admin',
               uploadedAt: cf.created_at || new Date().toISOString(),
               chunksCount: 1,
               totalTokens: 100,
@@ -253,12 +255,14 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       year,
       notes,
       organizationId,
+      projectCode,
+      projectName,
       uploadedBy,
       uploadedById
     } = req.body;
 
-    if (!title || !category || !organizationId) {
-      res.status(400).json({ success: false, message: 'Judul, kategori, dan organisasi tujuan wajib diisi.' });
+    if (!title || !category || (!organizationId && !projectCode && !projectName)) {
+      res.status(400).json({ success: false, message: 'Judul, kategori, dan proyek tujuan wajib diisi.' });
       return;
     }
 
@@ -267,19 +271,99 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
     // Project workspace unlimited upload support
     // (User can upload multiple files & documents to their project)
 
-    // Verify organization exists, or fallback gracefully
+    // Verify project exists, or fallback gracefully with multi-tier resolution
     let targetOrgId = organizationId;
-    let [orgRows] = await p.query<any[]>('SELECT id, name FROM organizations WHERE id = ?', [organizationId]);
+    let orgRows: any[] = [];
+
+    // 1. Try exact ID match
+    if (organizationId) {
+      const [rowsById] = await p.query<any[]>('SELECT id, name, code, knowledge_base FROM organizations WHERE id = ?', [organizationId]);
+      if (rowsById.length > 0) {
+        orgRows = rowsById;
+        targetOrgId = rowsById[0].id;
+      }
+    }
+
+    // 2. Try matching by projectCode or projectName if supplied
+    if (orgRows.length === 0 && (projectCode || projectName)) {
+      const [rowsByExplicit] = await p.query<any[]>(
+        'SELECT id, name, code, knowledge_base FROM organizations WHERE LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1',
+        [projectCode || '', projectName || '']
+      );
+      if (rowsByExplicit.length > 0) {
+        orgRows = rowsByExplicit;
+        targetOrgId = rowsByExplicit[0].id;
+      }
+    }
+
+    // 3. Try matching by code or name using organizationId (case-insensitive)
+    if (orgRows.length === 0 && organizationId) {
+      const [rowsByCodeOrName] = await p.query<any[]>(
+        'SELECT id, name, code, knowledge_base FROM organizations WHERE LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1',
+        [organizationId, organizationId]
+      );
+      if (rowsByCodeOrName.length > 0) {
+        orgRows = rowsByCodeOrName;
+        targetOrgId = rowsByCodeOrName[0].id;
+      }
+    }
+
+    // 4. If ID starts with 'org-', try extracting slug/code (e.g. 'org-prj-test-6353' -> 'PRJ-TEST' or 'test')
+    if (orgRows.length === 0 && typeof organizationId === 'string' && organizationId.startsWith('org-')) {
+      const cleaned = organizationId.replace(/^org-/, '').replace(/-[0-9]+$/, '');
+      const cleanedUpper = cleaned.toUpperCase();
+      const cleanedWithoutPrj = cleaned.replace(/^prj-/, '').toLowerCase();
+      const [rowsBySlug] = await p.query<any[]>(
+        'SELECT id, name, code, knowledge_base FROM organizations WHERE LOWER(code) = LOWER(?) OR LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1',
+        [cleaned, cleanedUpper, cleaned, cleanedWithoutPrj]
+      );
+      if (rowsBySlug.length > 0) {
+        orgRows = rowsBySlug;
+        targetOrgId = rowsBySlug[0].id;
+      }
+    }
+
+    // 5. Try matching user's assigned project (from authenticated user token or uploadedById)
     if (orgRows.length === 0) {
-      const [firstOrg] = await p.query<any[]>('SELECT id, name FROM organizations LIMIT 1');
-      if (firstOrg.length > 0) {
-        targetOrgId = firstOrg[0].id;
-        orgRows = firstOrg;
+      const effectiveUserId = (req as any).authUser?.id || uploadedById;
+      if (effectiveUserId) {
+        const [userRows] = await p.query<any[]>(
+          'SELECT o.id, o.name, o.code, o.knowledge_base FROM users u JOIN organizations o ON u.organization_id = o.id WHERE u.id = ? LIMIT 1',
+          [effectiveUserId]
+        );
+        if (userRows.length > 0) {
+          orgRows = userRows;
+          targetOrgId = userRows[0].id;
+        }
+      }
+    }
+
+    // 6. Fallback to latest active project in database
+    if (orgRows.length === 0) {
+      const [latestOrg] = await p.query<any[]>('SELECT id, name, code, knowledge_base FROM organizations ORDER BY created_at DESC LIMIT 1');
+      if (latestOrg.length > 0) {
+        orgRows = latestOrg;
+        targetOrgId = latestOrg[0].id;
+      }
+    }
+
+    // 7. If database has NO projects at all, auto-create default project so uploads are NEVER blocked
+    if (orgRows.length === 0) {
+      const defaultOrgId = 'org-utama';
+      await p.query(`
+        INSERT INTO organizations (id, name, code, knowledge_base, type, status)
+        VALUES (?, 'Proyek Utama', 'PRJ-UTAMA', 'kb_utama', 'Teknologi & Digital', 'active')
+      `, [defaultOrgId]);
+      const [createdOrg] = await p.query<any[]>('SELECT id, name, code, knowledge_base FROM organizations WHERE id = ?', [defaultOrgId]);
+      if (createdOrg.length > 0) {
+        orgRows = createdOrg;
+        targetOrgId = createdOrg[0].id;
       } else {
-        res.status(404).json({ success: false, message: 'Organisasi tujuan tidak ditemukan.' });
+        res.status(404).json({ success: false, message: 'Proyek tujuan tidak ditemukan. Silakan pilih atau buat Proyek terlebih dahulu.' });
         return;
       }
     }
+
     const orgName = orgRows[0].name;
 
     const file = req.file;
@@ -383,7 +467,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       VALUES (?, ?, ?, ?, ?, 'Upload Dokumen Baru', ?, 'document')
     `, [
       `act-${Date.now()}`,
-      organizationId,
+      targetOrgId,
       orgName,
       effectiveUserName,
       effectiveRole,
@@ -430,7 +514,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
 
     const createdDoc = {
       id: docId,
-      organizationId,
+      organizationId: targetOrgId,
       organizationName: orgName,
       title: title.trim(),
       category,
@@ -516,7 +600,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     }
 
     // 4. Clean up vector chunks and indexes in RAG service
-    let projectKey: { key: string; name: string } | null = null;
+    let projectKey: any = null;
     try {
       projectKey = await ensureProjectRagKey(doc.org_id, doc.org_name);
     } catch (kErr) {

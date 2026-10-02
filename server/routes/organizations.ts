@@ -74,7 +74,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
     `, [id]);
 
     if (rows.length === 0) {
-      res.status(404).json({ success: false, message: 'Organisasi tidak ditemukan.' });
+      res.status(404).json({ success: false, message: 'Proyek tidak ditemukan.' });
       return;
     }
 
@@ -134,7 +134,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     } = req.body;
 
     if (!name || !code || !type) {
-      res.status(400).json({ success: false, message: 'Nama, kode unik, dan tipe organisasi wajib diisi.' });
+      res.status(400).json({ success: false, message: 'Nama, kode unik, dan tipe proyek wajib diisi.' });
       return;
     }
 
@@ -143,7 +143,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     // Check code uniqueness
     const [existing] = await p.query<any[]>('SELECT id FROM organizations WHERE LOWER(code) = LOWER(?)', [code.trim()]);
     if (existing.length > 0) {
-      res.status(400).json({ success: false, message: `Kode organisasi "${code}" sudah digunakan. Gunakan kode lain.` });
+      res.status(400).json({ success: false, message: `Kode proyek "${code}" sudah digunakan. Gunakan kode lain.` });
       return;
     }
 
@@ -159,7 +159,9 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       }
     }
 
-    const orgId = `org-${Date.now()}`;
+    const orgId = (req.body.id && typeof req.body.id === 'string' && req.body.id.startsWith('org-'))
+      ? req.body.id
+      : `org-${Date.now()}`;
     await p.query(`
       INSERT INTO organizations (id, name, code, knowledge_base, type, sector, province, city, address, phone, email, website, description, admin_name, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
@@ -228,10 +230,10 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       createdAt: new Date().toISOString()
     };
 
-    res.status(201).json({ success: true, message: 'Organisasi berhasil dibuat!', organization: newOrg });
+    res.status(201).json({ success: true, message: 'Proyek berhasil dibuat!', organization: newOrg });
   } catch (err: any) {
     console.error('[CREATE ORG ERROR]', err);
-    res.status(500).json({ success: false, message: 'Gagal membuat organisasi baru.' });
+    res.status(500).json({ success: false, message: 'Gagal membuat proyek baru.' });
   }
 });
 
@@ -284,7 +286,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
 
     const [rows] = await p.query<any[]>('SELECT name FROM organizations WHERE id = ?', [id]);
     if (rows.length === 0) {
-      res.status(404).json({ success: false, message: 'Organisasi tidak ditemukan.' });
+      res.status(404).json({ success: false, message: 'Proyek tidak ditemukan.' });
       return;
     }
 
@@ -301,13 +303,13 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     // Log activity
     await p.query(`
       INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
-      VALUES (?, NULL, NULL, 'Admin', 'admin', 'Menghapus Organisasi', ?, 'organization')
+      VALUES (?, NULL, NULL, 'Admin', 'admin', 'Menghapus Proyek', ?, 'organization')
     `, [`act-${Date.now()}`, orgName]);
 
-    res.json({ success: true, message: `Organisasi ${orgName} berhasil dihapus.` });
+    res.json({ success: true, message: `Proyek ${orgName} berhasil dihapus.` });
   } catch (err: any) {
     console.error('[DELETE ORG ERROR]', err);
-    res.status(500).json({ success: false, message: 'Gagal menghapus organisasi.' });
+    res.status(500).json({ success: false, message: 'Gagal menghapus proyek.' });
   }
 });
 
@@ -319,17 +321,17 @@ router.patch('/:id/toggle-status', requireAuth, async (req: Request, res: Respon
 
     const [rows] = await p.query<any[]>('SELECT status, name FROM organizations WHERE id = ?', [id]);
     if (rows.length === 0) {
-      res.status(404).json({ success: false, message: 'Organisasi tidak ditemukan.' });
+      res.status(404).json({ success: false, message: 'Proyek tidak ditemukan.' });
       return;
     }
 
     const newStatus = rows[0].status === 'active' ? 'inactive' : 'active';
     await p.query('UPDATE organizations SET status = ? WHERE id = ?', [newStatus, id]);
 
-    res.json({ success: true, status: newStatus, message: `Status organisasi diubah menjadi ${newStatus}.` });
+    res.json({ success: true, status: newStatus, message: `Status proyek diubah menjadi ${newStatus}.` });
   } catch (err: any) {
     console.error('[TOGGLE STATUS ERROR]', err);
-    res.status(500).json({ success: false, message: 'Gagal mengubah status organisasi.' });
+    res.status(500).json({ success: false, message: 'Gagal mengubah status proyek.' });
   }
 });
 

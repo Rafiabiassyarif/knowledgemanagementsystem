@@ -65,6 +65,9 @@ export interface RagQueryResult {
  * Returns isolated knowledge base ID per organization to enforce multi-tenant boundaries.
  */
 export function getKnowledgeBaseId(organizationId?: string | null): string {
+  if (process.env.RAG_DEFAULT_KB && process.env.RAG_DEFAULT_KB.trim()) {
+    return process.env.RAG_DEFAULT_KB.trim();
+  }
   if (!organizationId || organizationId === 'all') {
     return 'bumd_global_kb';
   }

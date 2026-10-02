@@ -26,6 +26,7 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
       id: r.id,
       name: r.name,
       code: r.code,
+      knowledgeBase: r.knowledge_base || ('kb_' + (r.code || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_')),
       type: r.type,
       sector: r.sector,
       province: r.province,
@@ -82,6 +83,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
       id: r.id,
       name: r.name,
       code: r.code,
+      knowledgeBase: r.knowledge_base || ('kb_' + (r.code || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_')),
       type: r.type,
       sector: r.sector,
       province: r.province,
@@ -115,6 +117,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     const {
       name,
       code,
+      knowledgeBase,
+      knowledge_base,
       type,
       sector,
       province,
@@ -143,14 +147,27 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    // Generate or clean knowledge base code
+    let finalKb = (knowledgeBase || knowledge_base || '').trim();
+    if (!finalKb) {
+      const slug = (code.trim() || name.trim() || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 30);
+      finalKb = 'kb_' + (slug.startsWith('prj_') ? slug.replace('prj_', '') : slug);
+    } else {
+      finalKb = finalKb.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      if (!finalKb.startsWith('kb_')) {
+        finalKb = `kb_${finalKb}`;
+      }
+    }
+
     const orgId = `org-${Date.now()}`;
     await p.query(`
-      INSERT INTO organizations (id, name, code, type, sector, province, city, address, phone, email, website, description, admin_name, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+      INSERT INTO organizations (id, name, code, knowledge_base, type, sector, province, city, address, phone, email, website, description, admin_name, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
     `, [
       orgId,
       name.trim(),
       code.trim().toUpperCase(),
+      finalKb,
       type,
       sector || null,
       province || null,
@@ -191,6 +208,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       id: orgId,
       name: name.trim(),
       code: code.trim().toUpperCase(),
+      knowledgeBase: finalKb,
       type,
       sector,
       province,

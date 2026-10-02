@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import { Readable } from 'stream';
 import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
 import { uploadToKroomboxCDN, deleteFromKroomboxCDN, createCDNSignedUrl, listKroomboxCDNFiles } from '../services/cdn';
 import { requireAuth } from '../middleware/auth';
@@ -49,6 +52,14 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       params.push(`%${search}%`, `%${search}%`);
     }
 
+    // Role-based visibility:
+    // User biasa HANYA melihat dokumen yang di-upload oleh user atau dokumen milik sendiri.
+    // Admin & Superadmin melihat SEMUA dokumen (baik unggahan admin maupun unggahan user).
+    if (req.authUser && req.authUser.role === 'user') {
+      conditions.push('(d.uploader_role = "user" OR d.uploader_role IS NULL OR d.uploaded_by_id = ?)');
+      params.push(req.authUser.id);
+    }
+
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
@@ -74,15 +85,18 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       tags: typeof r.tags === 'string' ? JSON.parse(r.tags) : (r.tags || []),
       notes: r.notes,
       uploadedBy: r.uploaded_by,
+      uploadedById: r.uploaded_by_id,
+      uploaderRole: r.uploader_role || 'user',
       uploadedAt: r.created_at,
       chunksCount: Math.max(3, Math.round(r.file_size_kb / 400)),
       totalTokens: Math.max(500, Math.round(r.file_size_kb * 1.8)),
       ragStatus: 'indexed'
     }));
 
-    // Merge any assets stored directly on Kroombox Edge CDN
-    try {
-      const cdnFiles = await listKroomboxCDNFiles();
+    // Merge any assets stored directly on Kroombox Edge CDN (khusus admin/superadmin)
+    if (req.authUser && req.authUser.role !== 'user') {
+      try {
+        const cdnFiles = await listKroomboxCDNFiles();
       if (Array.isArray(cdnFiles) && cdnFiles.length > 0) {
         for (const cf of cdnFiles) {
           const exists = documents.some(d => d.cdnFileId === cf.id || (cf.name && d.title.toLowerCase() === cf.name.toLowerCase().replace(/\.[^/.]+$/, "")));
@@ -116,6 +130,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     } catch (cdnErr) {
       console.warn('[CDN FETCH FOR DOCS WARN]', cdnErr);
     }
+  }
 
     res.json({ success: true, documents });
   } catch (err: any) {
@@ -290,12 +305,23 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
           console.log(`[KROOMBOX CDN] Berkas "${file.originalname}" sukses diunggah ke CDN: ${fileUrl}`);
         }
       } catch (cdnErr: any) {
-        console.error('[CDN UPLOAD FAILED]', cdnErr?.message || cdnErr);
-        res.status(502).json({
-          success: false,
-          message: `Gagal mengunggah berkas: ${cdnErr?.message || 'Kesalahan penyimpanan'}. Silakan coba beberapa saat lagi.`
-        });
-        return;
+        console.warn('[CDN UPLOAD WARN, FALLING BACK TO LOCAL STORAGE]', cdnErr?.message || cdnErr);
+        try {
+          const uploadsDir = path.resolve('uploads');
+          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+          const safeName = `${docId}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const localPath = path.join(uploadsDir, safeName);
+          fs.writeFileSync(localPath, file.buffer);
+          fileUrl = `/uploads/${safeName}`;
+          console.log(`[LOCAL STORAGE FALLBACK] Berkas tersimpan lokal di: ${fileUrl}`);
+        } catch (localErr: any) {
+          console.error('[LOCAL STORAGE SAVE FAILED]', localErr);
+          res.status(500).json({
+            success: false,
+            message: `Gagal menyimpan berkas: ${localErr?.message || 'Kesalahan penyimpanan'}.`
+          });
+          return;
+        }
       }
     }
 
@@ -311,9 +337,13 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       ? notes.trim()
       : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI.`;
 
+    const effectiveRole = req.authUser?.role || req.body.uploaderRole || 'user';
+    const effectiveUserId = req.authUser?.id || req.body.uploadedById || null;
+    const effectiveUserName = req.authUser?.name || req.body.uploadedBy || (effectiveRole === 'admin' || effectiveRole === 'superadmin' ? 'Admin' : 'Pengguna');
+
     await p.query(`
-      INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, year, summary, tags, notes, uploaded_by, uploaded_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, year, summary, tags, notes, uploaded_by, uploaded_by_id, uploader_role)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         title = VALUES(title),
         category = VALUES(category),
@@ -325,7 +355,8 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
         file_name = VALUES(file_name),
         year = VALUES(year),
         summary = VALUES(summary),
-        notes = VALUES(notes)
+        notes = VALUES(notes),
+        uploader_role = VALUES(uploader_role)
     `, [
       docId,
       targetOrgId,
@@ -341,19 +372,21 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       summary,
       generatedTags,
       notes || null,
-      uploadedBy || 'Admin BUMD',
-      uploadedById || null
+      effectiveUserName,
+      effectiveUserId,
+      effectiveRole
     ]);
 
     // Log activity
     await p.query(`
       INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
-      VALUES (?, ?, ?, ?, 'admin', 'Upload Dokumen Baru', ?, 'document')
+      VALUES (?, ?, ?, ?, ?, 'Upload Dokumen Baru', ?, 'document')
     `, [
       `act-${Date.now()}`,
       organizationId,
       orgName,
-      uploadedBy || 'Admin',
+      effectiveUserName,
+      effectiveRole,
       title.trim()
     ]);
 
@@ -362,9 +395,22 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
     // saat RAG sedang down) supaya upload tidak pernah terblokir.
     const docDisplayName = file ? file.originalname : `${title.trim()}.${(fileType || 'pdf').toLowerCase()}`;
     const projectKey = await ensureProjectRagKey(targetOrgId, orgName);
+
+    // Ambil kode Knowledge Base unik milik project ini
+    let targetKb: string | null = null;
+    try {
+      const [orgKbRows] = await p.query<any[]>('SELECT knowledge_base FROM organizations WHERE id = ?', [targetOrgId]);
+      if (orgKbRows.length > 0 && orgKbRows[0].knowledge_base) {
+        targetKb = orgKbRows[0].knowledge_base;
+      }
+    } catch (kErr) {
+      console.warn('[ORG KB QUERY WARN]', kErr);
+    }
+
     indexDocumentToRag({
       documentId: docId,
       organizationId: targetOrgId,
+      knowledgeBaseId: targetKb,
       documentName: docDisplayName,
       contentBuffer: file ? file.buffer : null,
       text: summary,
@@ -374,6 +420,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
         year: Number(year) || new Date().getFullYear(),
         uploadedBy: uploadedBy || 'Admin',
         project_key_source: projectKey.source,
+        knowledge_base: targetKb,
         cdn_url: fileUrl,
         cdn_file_id: cdnFileId
       }
@@ -419,6 +466,18 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     const { id } = req.params;
     const p = getPool();
 
+    // 1. Support direct CDN asset deletion if id starts with 'cdn-'
+    if (id.startsWith('cdn-')) {
+      const cdnFileId = id.replace('cdn-', '');
+      try {
+        await deleteFromKroomboxCDN(cdnFileId);
+      } catch (cdnErr) {
+        console.warn('[KROOMBOX CDN DIRECT DELETE WARN]', cdnErr);
+      }
+      res.json({ success: true, message: 'Berkas CDN berhasil dihapus.' });
+      return;
+    }
+
     const [rows] = await p.query<any[]>(`
       SELECT d.title, d.file_url, d.cdn_file_id, o.id as org_id, o.name as org_name 
       FROM documents d 
@@ -433,28 +492,53 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
 
     const doc = rows[0];
 
-    // If file was stored on Kroombox CDN, delete it from CDN storage
+    // 2. If file was stored on Kroombox CDN, delete it from CDN storage
     if (doc.cdn_file_id) {
-      deleteFromKroomboxCDN(doc.cdn_file_id).catch(cdnErr => {
+      try {
+        await deleteFromKroomboxCDN(doc.cdn_file_id);
+        console.log(`[CDN] Aset ID: ${doc.cdn_file_id} berhasil dihapus dari Kroombox CDN.`);
+      } catch (cdnErr) {
         console.warn('[KROOMBOX CDN DELETE WARN]', cdnErr);
-      });
+      }
     }
 
-    // Binary is stored in the DB row — deleting the row removes everything.
+    // 3. Clean up local fallback file if stored under /uploads/
+    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
+      try {
+        const localPath = path.resolve('.' + doc.file_url);
+        if (fs.existsSync(localPath)) {
+          fs.unlinkSync(localPath);
+          console.log(`[STORAGE] Berkas lokal ${localPath} berhasil dihapus.`);
+        }
+      } catch (fErr) {
+        console.warn('[LOCAL FILE DELETE WARN]', fErr);
+      }
+    }
+
+    // 4. Clean up vector chunks and indexes in RAG service
+    let projectKey: { key: string; name: string } | null = null;
+    try {
+      projectKey = await ensureProjectRagKey(doc.org_id, doc.org_name);
+    } catch (kErr) {
+      console.warn('[RAG PROJECT KEY GET WARN]', kErr);
+    }
+
+    try {
+      await deleteDocumentFromRag(id, projectKey?.key);
+    } catch (ragErr) {
+      console.warn('[RAG DELETE WARN]', ragErr);
+    }
+
+    // 5. Delete metadata record from MySQL database
     await p.query('DELETE FROM documents WHERE id = ?', [id]);
 
-    // Clean up vector chunks in RAG service
-    deleteDocumentFromRag(id).catch(ragErr => {
-      console.warn('[RAG DELETE WARN]', ragErr);
-    });
-
-    // Log activity
+    // 6. Log activity
     await p.query(`
       INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
       VALUES (?, ?, ?, 'Admin', 'admin', 'Menghapus Dokumen', ?, 'document')
     `, [`act-${Date.now()}`, doc.org_id, doc.org_name, doc.title]);
 
-    res.json({ success: true, message: `Dokumen "${doc.title}" berhasil dihapus.` });
+    res.json({ success: true, message: `Dokumen "${doc.title}" berhasil dihapus dari KMS, CDN, dan RAG.` });
   } catch (err: any) {
     console.error('[DELETE DOC ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal menghapus dokumen.' });
@@ -488,14 +572,104 @@ function generatePdfBuffer(title: string, orgName: string, category: string, sum
   return Buffer.from(pdfString, 'utf-8');
 }
 
-// 5. Download document (redirect ke Kroombox CDN; fallback PDF untuk dokumen seed tanpa berkas)
+// 5. Update document metadata
+router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      category,
+      repositoryType,
+      year,
+      department,
+      summary,
+      notes,
+      tags
+    } = req.body;
+
+    const p = getPool();
+    const [rows] = await p.query<any[]>('SELECT * FROM documents WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan.' });
+      return;
+    }
+
+    const doc = rows[0];
+    // Check permission: user can only edit their own doc unless admin/superadmin
+    if (req.authUser && req.authUser.role === 'user' && doc.uploaded_by_id && doc.uploaded_by_id !== req.authUser.id) {
+      res.status(403).json({ success: false, message: 'Anda hanya dapat mengedit dokumen yang Anda unggah.' });
+      return;
+    }
+
+    const updatedTitle = title !== undefined ? String(title).trim() : doc.title;
+    const updatedCategory = category !== undefined ? String(category).trim() : doc.category;
+    const updatedRepoType = repositoryType !== undefined ? String(repositoryType).trim() : (doc.repository_type || 'document');
+    const updatedYear = year !== undefined ? Number(year) : doc.year;
+    const updatedDept = department !== undefined ? String(department).trim() : doc.department;
+    const updatedSummary = summary !== undefined ? String(summary).trim() : doc.summary;
+    const updatedNotes = notes !== undefined ? (notes ? String(notes).trim() : null) : doc.notes;
+    const updatedTags = tags !== undefined
+      ? (typeof tags === 'string' ? tags : JSON.stringify(tags))
+      : (typeof doc.tags === 'string' ? doc.tags : JSON.stringify(doc.tags || []));
+
+    await p.query(`
+      UPDATE documents 
+      SET title = ?, category = ?, repository_type = ?, year = ?, department = ?, summary = ?, notes = ?, tags = ?
+      WHERE id = ?
+    `, [
+      updatedTitle,
+      updatedCategory,
+      updatedRepoType,
+      updatedYear,
+      updatedDept,
+      updatedSummary,
+      updatedNotes,
+      updatedTags,
+      id
+    ]);
+
+    // Log activity
+    await p.query(`
+      INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+      VALUES (?, ?, (SELECT name FROM organizations WHERE id = ?), ?, ?, 'Perbarui Metadata Dokumen', ?, 'document')
+    `, [
+      `act-${Date.now()}`,
+      doc.organization_id,
+      doc.organization_id,
+      req.authUser?.name || 'Pengguna',
+      req.authUser?.role || 'user',
+      updatedTitle
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Metadata dokumen berhasil diperbarui.',
+      document: {
+        ...doc,
+        title: updatedTitle,
+        category: updatedCategory,
+        repositoryType: updatedRepoType,
+        year: updatedYear,
+        department: updatedDept,
+        summary: updatedSummary,
+        notes: updatedNotes,
+        tags: typeof updatedTags === 'string' ? JSON.parse(updatedTags) : updatedTags
+      }
+    });
+  } catch (err: any) {
+    console.error('[UPDATE DOC ERROR]', err);
+    res.status(500).json({ success: false, message: err?.message || 'Gagal memperbarui metadata dokumen.' });
+  }
+});
+
+// 6. Download document (Real streaming dari Kroombox CDN / URL / Local dengan header attachment)
 router.get('/:id/download', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();
 
     const [rows] = await p.query<any[]>(`
-      SELECT d.file_url, d.cdn_file_id, d.file_name, d.file_type, d.title, d.summary, d.category, o.name as organization_name 
+      SELECT d.*, o.name as organization_name 
       FROM documents d 
       JOIN organizations o ON d.organization_id = o.id 
       WHERE d.id = ?
@@ -507,32 +681,63 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
     }
 
     const doc = rows[0];
+    const ext = (doc.file_type || path.extname(doc.file_name || doc.file_url || '').replace('.', '') || 'pdf').toLowerCase();
+    const safeTitle = (doc.title || doc.file_name || 'dokumen').replace(/[/\\?%*:|"<>]/g, '_');
+    const downloadFileName = safeTitle.toLowerCase().endsWith(`.${ext}`) ? safeTitle : `${safeTitle}.${ext}`;
 
-    // 1. CDN file ID -> redirect ke signed delivery URL berkecepatan tinggi
+    // 1. CDN file ID -> stream directly dengan Content-Disposition: attachment!
     if (doc.cdn_file_id) {
       try {
         const signedUrl = await createCDNSignedUrl(doc.cdn_file_id, 86400);
         if (signedUrl) {
-          res.redirect(signedUrl);
-          return;
+          const cdnRes = await fetch(signedUrl);
+          if (cdnRes.ok && cdnRes.body) {
+            res.setHeader('Content-Type', cdnRes.headers.get('content-type') || 'application/octet-stream');
+            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
+            if (cdnRes.headers.get('content-length')) {
+              res.setHeader('Content-Length', cdnRes.headers.get('content-length')!);
+            }
+            Readable.fromWeb(cdnRes.body as any).pipe(res);
+            return;
+          }
         }
       } catch (cdnErr) {
-        console.warn('[CDN REDIRECT WARN]', cdnErr);
+        console.warn('[CDN STREAM WARN]', cdnErr);
       }
     }
 
-    // 2. URL CDN langsung -> redirect
+    // 2. Direct external CDN URL (http / https) -> fetch dan stream dengan Content-Disposition: attachment!
     if (doc.file_url && (doc.file_url.startsWith('http://') || doc.file_url.startsWith('https://'))) {
-      res.redirect(doc.file_url);
-      return;
+      try {
+        const extRes = await fetch(doc.file_url);
+        if (extRes.ok && extRes.body) {
+          res.setHeader('Content-Type', extRes.headers.get('content-type') || 'application/octet-stream');
+          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
+          if (extRes.headers.get('content-length')) {
+            res.setHeader('Content-Length', extRes.headers.get('content-length')!);
+          }
+          Readable.fromWeb(extRes.body as any).pipe(res);
+          return;
+        }
+      } catch (extErr) {
+        console.warn('[EXTERNAL STREAM WARN]', extErr);
+      }
     }
-    const ext = (doc.file_type || 'PDF').toLowerCase();
-    const safeTitle = (doc.title || 'dokumen').replace(/[/\\?%*:|"<>]/g, '_');
+
+    // 2b. URL lokal /uploads/... -> res.download or res.sendFile
+    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
+      const localFilePath = path.resolve('.' + doc.file_url);
+      if (fs.existsSync(localFilePath)) {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"`);
+        res.sendFile(localFilePath);
+        return;
+      }
+    }
 
     // 3. Fallback dokumen seed/legacy tanpa berkas fisik: hasilkan PDF ringkasan
     const pdfBuf = generatePdfBuffer(doc.title, doc.organization_name, doc.category, doc.summary);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"`);
     res.send(pdfBuf);
   } catch (err: any) {
     console.error('[DOWNLOAD DOC ERROR]', err);
@@ -540,33 +745,51 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
   }
 });
 
-// 6. Sync all database documents to RAG Service (using real binary from MySQL)
-router.post('/sync-rag', requireAuth, async (_req: Request, res: Response): Promise<void> => {
+// 7. Sync database documents to RAG Service (dengan Knowledge Base per project)
+router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const orgId = (req.body?.organizationId || req.query?.organizationId) as string | undefined;
     const p = getPool();
-    const [docs] = await p.query<any[]>('SELECT * FROM documents');
+    let query = `
+      SELECT d.*, o.name as org_name, o.knowledge_base 
+      FROM documents d 
+      JOIN organizations o ON d.organization_id = o.id
+    `;
+    const params: any[] = [];
+    if (orgId && orgId !== 'all') {
+      query += ' WHERE d.organization_id = ?';
+      params.push(orgId);
+    }
+
+    const [docs] = await p.query<any[]>(query, params);
     let indexedCount = 0;
 
     for (const doc of docs) {
+      const projectKey = await ensureProjectRagKey(doc.organization_id, doc.org_name);
       await indexDocumentToRag({
         documentId: doc.id,
         organizationId: doc.organization_id,
+        knowledgeBaseId: doc.knowledge_base || null,
         documentName: doc.file_name || `${doc.title}.${(doc.file_type || 'PDF').toLowerCase()}`,
         contentBuffer: null,
         text: doc.summary || doc.title,
+        apiKey: projectKey.key,
         metadata: {
           category: doc.category,
           year: doc.year,
-          uploadedBy: doc.uploaded_by
+          uploadedBy: doc.uploaded_by,
+          knowledge_base: doc.knowledge_base || null
         }
       });
       indexedCount++;
     }
 
+    const kbName = docs.length > 0 && docs[0].knowledge_base ? docs[0].knowledge_base : 'Tenant Default';
     res.json({
       success: true,
-      message: `Berhasil mensinkronisasikan ${indexedCount} dokumen ke RAG service.`,
-      count: indexedCount
+      message: `Berhasil menghubungkan dan mensinkronisasikan ${indexedCount} dokumen ke RAG Service (Knowledge Base: ${kbName}).`,
+      count: indexedCount,
+      knowledgeBase: kbName
     });
   } catch (err: any) {
     console.error('[SYNC RAG ERROR]', err);

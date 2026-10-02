@@ -23,8 +23,11 @@ import {
   CheckCircle2,
   HardDrive,
   FileCheck,
-  ExternalLink
+  ExternalLink,
+  Edit3
 } from 'lucide-react';
+import { EditDocumentModal } from '../components/common/EditDocumentModal';
+import { DocumentItem } from '../types';
 
 export const DocumentsPage: React.FC = () => {
   const { 
@@ -33,10 +36,12 @@ export const DocumentsPage: React.FC = () => {
     currentOrganization, 
     setSelectedDocForViewer, 
     deleteDocument,
+    updateDocument,
     organizations 
   } = useApp();
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
   const [selectedRepoTab, setSelectedRepoTab] = useState<'all' | 'document' | 'photo' | 'knowledge'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -90,10 +95,10 @@ export const DocumentsPage: React.FC = () => {
   });
 
   const handleDownloadDoc = (doc: any) => {
-    const targetUrl = (doc.fileUrl && !doc.fileUrl.startsWith('db://'))
-      ? doc.fileUrl
-      : `${API_BASE_URL}/documents/${doc.id}/download`;
-    downloadProtectedFile(targetUrl, `${doc.title}.${(doc.fileType || 'PDF').toLowerCase()}`)
+    const targetUrl = `${API_BASE_URL}/documents/${doc.id}/download`;
+    const ext = (doc.fileType || 'PDF').toLowerCase();
+    const filename = `${doc.title}.${ext}`;
+    downloadProtectedFile(targetUrl, filename, doc.id)
       .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
   };
 
@@ -482,25 +487,30 @@ export const DocumentsPage: React.FC = () => {
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => setEditingDoc(doc)}
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Metadata Dokumen"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleDownloadDoc(doc)}
                           className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                           title="Unduh Berkas"
                         >
                           <Download className="w-4 h-4" />
                         </button>
-                        {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin' || doc.uploadedBy === currentUser?.name) && (
-                          <button
-                            onClick={() => {
-                              if (confirm(`Hapus berkas "${doc.title}" dari repositori proyek?`)) {
-                                deleteDocument(doc.id);
-                              }
-                            }}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                            title="Hapus Berkas"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => {
+                            if (confirm(`Hapus berkas "${doc.title}" dari repositori proyek?`)) {
+                              deleteDocument(doc.id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Hapus Berkas"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -582,6 +592,13 @@ export const DocumentsPage: React.FC = () => {
 
                   <div className="flex items-center gap-1.5">
                     <button
+                      onClick={() => setEditingDoc(doc)}
+                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="Edit Metadata Dokumen"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleDownloadDoc(doc)}
                       className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                       title="Unduh Berkas"
@@ -594,19 +611,17 @@ export const DocumentsPage: React.FC = () => {
                     >
                       Detail
                     </button>
-                    {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin' || doc.uploadedBy === currentUser?.name) && (
-                      <button
-                        onClick={() => {
-                          if (confirm(`Hapus berkas "${doc.title}" dari repositori proyek?`)) {
-                            deleteDocument(doc.id);
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                        title="Hapus Dokumen"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        if (confirm(`Hapus berkas "${doc.title}" dari repositori proyek?`)) {
+                          deleteDocument(doc.id);
+                        }
+                      }}
+                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                      title="Hapus Dokumen"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -642,6 +657,16 @@ export const DocumentsPage: React.FC = () => {
 
       {/* Upload Document Modal */}
       <UploadDocumentModal isOpen={uploadModalOpen} onClose={() => setUploadModalOpen(false)} />
+
+      {/* Edit Document Modal */}
+      <EditDocumentModal 
+        isOpen={!!editingDoc}
+        document={editingDoc}
+        onClose={() => setEditingDoc(null)}
+        onSave={async (id, updates) => {
+          await updateDocument(id, updates);
+        }}
+      />
     </div>
   );
 };

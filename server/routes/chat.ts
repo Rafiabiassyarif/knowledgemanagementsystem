@@ -328,7 +328,8 @@ async function handleFileRequest(
     answer += `${icon} **${d.title}**\n` +
       `• **Jenis**: ${label} (${(d.file_type || 'PDF').toUpperCase()} · ${d.file_size_kb || 0} KB)\n` +
       `• **Kategori**: ${d.category} · ${d.department || 'Umum'}\n` +
-      `• **Penyimpanan**: Repositori Digital Resmi\n` +
+      `• **Penyimpanan**: Repositori Digital Resmi (Kroombox Edge CDN)\n` +
+      (isImg && d.cdnUrl ? `![${d.title}](${d.cdnUrl})\n` : '') +
       `🔗 **Akses Berkas:**\n` +
       `[📥 Unduh / Buka ${label}](${d.cdnUrl})\n\n`;
   }
@@ -372,11 +373,13 @@ router.post('/query', async (req: Request, res: Response): Promise<void> => {
     let orgName = 'Organisasi Anda';
     let docCount = 0;
 
+    let targetKb: string | null = null;
     if (organizationId && organizationId !== 'all') {
       try {
-        const [orgRows] = await p.query<any[]>('SELECT name FROM organizations WHERE id = ?', [organizationId]);
+        const [orgRows] = await p.query<any[]>('SELECT name, knowledge_base FROM organizations WHERE id = ?', [organizationId]);
         if (orgRows.length > 0) {
           orgName = orgRows[0].name;
+          targetKb = orgRows[0].knowledge_base;
         }
         const [docRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM documents WHERE organization_id = ?', [organizationId]);
         docCount = docRows[0]?.cnt || 0;
@@ -394,10 +397,11 @@ router.post('/query', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Call RAG service with isolated organizationId
+    // Call RAG service with isolated organizationId and Knowledge Base ID
     const result = await queryRag({
       query: query.trim(),
       organizationId: organizationId || null,
+      knowledgeBaseId: targetKb || undefined,
       documentIds: Array.isArray(documentIds) ? documentIds : undefined,
       strictGrounding: true
     });
@@ -411,21 +415,24 @@ router.post('/query', async (req: Request, res: Response): Promise<void> => {
       result.answer = formatOutOfContextResponse(query.trim(), orgName, docCount);
     }
 
-    // SEMBUNYI SEMENTARA: kembalikan nanti bila ingin jawaban RAG normal
-    // otomatis menyertakan lampiran CDN dari sumber jawaban.
-    // if (result.success && result.sources.length > 0) {
-    //   const srcDocIds = result.sources.map(s => String(s.document_id || '')).filter(Boolean);
-    //   if (srcDocIds.length > 0) {
-    //     const [attRows] = await p.query<any[]>(
-    //       `SELECT id, title, repository_type, file_type, file_size_kb, file_url, file_name, cdn_file_id
-    //        FROM documents WHERE id IN (?)`,
-    //       [srcDocIds]
-    //     );
-    //     if (attRows.length > 0) {
-    //       result.attachments = await buildAttachments(attRows);
-    //     }
-    //   }
-    // }
+    // Otomatis menyertakan lampiran CDN dan kartu dokumen dari sumber jawaban RAG
+    if (result.success && result.sources && result.sources.length > 0) {
+      const srcDocIds = result.sources.map(s => String(s.document_id || '')).filter(Boolean);
+      if (srcDocIds.length > 0) {
+        try {
+          const [attRows] = await p.query<any[]>(
+            `SELECT id, title, repository_type, file_type, file_size_kb, file_url, file_name, cdn_file_id
+             FROM documents WHERE id IN (?)`,
+            [srcDocIds]
+          );
+          if (attRows.length > 0) {
+            result.attachments = await buildAttachments(attRows);
+          }
+        } catch (attErr) {
+          console.warn('[CHAT ATTACHMENT FETCH WARN]', attErr);
+        }
+      }
+    }
 
     res.json(result);
   } catch (err: any) {

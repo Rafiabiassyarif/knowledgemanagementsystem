@@ -76,6 +76,7 @@ interface AppContextType {
     organizationId?: string;
   }, file?: File) => Promise<DocumentItem>;
   deleteDocument: (id: string) => void;
+  updateDocument: (id: string, updates: Partial<DocumentItem>) => Promise<boolean>;
   approveJoinRequest: (requestId: string) => void;
   rejectJoinRequest: (requestId: string) => void;
   submitJoinRequest: (orgCode: string, name: string, email: string, dept: string, reason: string) => { success: boolean; message: string };
@@ -258,13 +259,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('kms_users_store', JSON.stringify(mappedUsers));
         }
         if (docsRes.status === 'fulfilled' && docsRes.value.success) {
-          setDocuments(prev => {
-            const backendDocs = docsRes.value.documents || [];
-            if (backendDocs.length === 0) return prev; // backend empty: keep local/seed docs
-            const backendIds = new Set(backendDocs.map((d: any) => d.id));
-            const localOnly = prev.filter(d => !backendIds.has(d.id));
-            return [...localOnly, ...backendDocs];
-          });
+          const backendDocs = docsRes.value.documents || [];
+          setDocuments(backendDocs);
+          localStorage.setItem('kms_documents_store', JSON.stringify(backendDocs));
         }
         if (logsRes.status === 'fulfilled' && logsRes.value.success) {
           setActivityLogs(prev => {
@@ -337,10 +334,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser) return [];
     const targetId = activeProjectId || currentUser.organizationId;
     if (!targetId) return [];
+    let base = documents.filter(doc => !doc.organizationId || doc.organizationId === targetId);
     if (currentUser.role === 'superadmin' && !activeProjectId) {
-      return documents;
+      base = documents;
     }
-    return documents.filter(doc => !doc.organizationId || doc.organizationId === targetId);
+
+    // Role-based visibility:
+    // User biasa TIDAK BISA melihat dokumen yang di-upload oleh Admin.
+    // User biasa hanya melihat dokumen unggahan user atau unggahan miliknya sendiri.
+    // Admin & Superadmin dapat melihat SEMUA dokumen (baik unggahan admin maupun user).
+    if (currentUser.role === 'user') {
+      base = base.filter(doc => (doc.uploaderRole === 'user' || !doc.uploaderRole || doc.uploadedById === currentUser.id));
+    }
+
+    return base;
   }, [currentUser, activeProjectId, documents]);
 
   // Accessible chunks based on role & active project
@@ -631,9 +638,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const newId = `org-${newOrgData.code.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
+    const finalKb = newOrgData.knowledgeBase || ('kb_' + (newOrgData.code || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_'));
     const newOrg: Organization = {
       ...newOrgData,
       id: newId,
+      knowledgeBase: finalKb,
       documentsCount: 0,
       usersCount: 1,
       chunksCount: 0,
@@ -665,6 +674,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Persist to MySQL Backend
     api.organizations.create({
       ...newOrgData,
+      knowledgeBase: finalKb,
       adminName: newOrg.adminName,
       creatorId: currentUser?.id,
       creatorRole: currentUser?.role || 'admin'
@@ -807,6 +817,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fileType: docData.fileType,
       fileSizeKb: docData.fileSizeKb,
       uploadedBy: currentUser ? currentUser.name : 'Admin',
+      uploadedById: currentUser?.id,
+      uploaderRole: currentUser?.role || 'user',
       uploadedAt: new Date().toISOString().split('T')[0],
       version: 'v1.0',
       status: 'indexed',
@@ -856,6 +868,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fd.append('notes', docData.summary);
     fd.append('uploadedBy', currentUser ? currentUser.name : 'Admin');
     fd.append('uploadedById', currentUser ? currentUser.id : '');
+    fd.append('uploaderRole', currentUser?.role || 'user');
     if (file) {
       fd.append('file', file);
     }
@@ -941,6 +954,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'document'
     };
     setActivityLogs(prev => [log, ...prev]);
+  };
+
+  // Update Document
+  const updateDocument = async (id: string, updates: Partial<DocumentItem>): Promise<boolean> => {
+    try {
+      const res = await api.documents.update(id, updates);
+      if (res && res.success) {
+        setDocuments(prev => prev.map(doc => {
+          if (doc.id === id) {
+            return {
+              ...doc,
+              ...updates,
+              ...(res.document || {})
+            };
+          }
+          return doc;
+        }));
+
+        const targetDoc = documents.find(d => d.id === id);
+        const log: ActivityLog = {
+          id: `act-${Date.now()}`,
+          organizationId: targetDoc?.organizationId || null,
+          organizationName: targetDoc?.organizationName || 'KMS BUMD',
+          actorName: currentUser ? currentUser.name : 'Pengguna',
+          actorRole: currentUser?.role || 'user',
+          action: 'Memperbarui Metadata Dokumen',
+          target: updates.title || targetDoc?.title || id,
+          timestamp: 'Baru saja',
+          type: 'document'
+        };
+        setActivityLogs(prev => [log, ...prev]);
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('[UPDATE DOCUMENT ERROR]', err);
+      throw err;
+    }
   };
 
   // Add User
@@ -1521,6 +1572,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toggleOrgStatus,
       uploadDocument,
       deleteDocument,
+      updateDocument,
       approveJoinRequest,
       rejectJoinRequest,
       submitJoinRequest,

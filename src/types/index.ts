@@ -15,6 +15,7 @@ export interface Organization {
   id: string;
   name: string;
   code: string;
+  knowledgeBase?: string;
   description: string;
   type: OrgType;
   sector: string;
@@ -106,6 +107,8 @@ export interface DocumentItem {
   fileUrl?: string;
   cdnFileId?: string;
   notes?: string;
+  uploadedById?: string;
+  uploaderRole?: 'admin' | 'user' | string;
   // compatibility aliases
   organization_id?: string;
   organization_name?: string;

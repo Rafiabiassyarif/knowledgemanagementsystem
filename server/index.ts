@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 import { initDatabase } from './db';
 import { requireAuth } from './middleware/auth';
 
@@ -22,6 +24,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Ensure uploads directory exists
+const uploadsDir = path.resolve('uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Middleware
 app.use(cors({
   origin: true,
@@ -29,6 +37,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use('/uploads', express.static(uploadsDir));
 
 // API Documentation & OpenAPI Spec (Public)
 app.use('/api', swaggerRouter);

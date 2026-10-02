@@ -182,8 +182,9 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     setProgressPercent(5);
     setUploadError('');
 
-    const targetOrgId = defaultOrgId || currentOrganization?.id || currentUser?.organizationId || undefined;
+    const targetOrgId = defaultOrgId || currentOrganization?.id || currentUser?.organizationId || (organizations && organizations[0]?.id) || undefined;
     let completed = 0;
+    let lastErrorMessage = '';
 
     for (let i = 0; i < queuedFiles.length; i++) {
       const item = queuedFiles[i];
@@ -221,6 +222,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
 
         setQueuedFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'completed' } : f));
       } catch (err: any) {
+        lastErrorMessage = err?.message || 'Gagal mengunggah berkas.';
         console.error(`[UPLOAD ERROR: ${item.file.name}]`, err);
         setQueuedFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'error', errorMessage: err?.message || 'Gagal unggah' } : f));
       }
@@ -229,7 +231,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     if (completed > 0) {
       setProcessState('completed');
     } else {
-      setUploadError('Seluruh berkas gagal diunggah. Pastikan format berkas didukung dan ukuran di bawah 50MB.');
+      setUploadError(lastErrorMessage || 'Seluruh berkas gagal diunggah. Pastikan format berkas didukung dan ukuran di bawah 50MB.');
       setProcessState('error');
     }
   };
@@ -545,6 +547,14 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                           <option value="knowledge">Knowledge Base</option>
                         </select>
                       </div>
+
+                      {/* Detail Pesan Error Spesifik per Berkas */}
+                      {item.status === 'error' && item.errorMessage && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 mt-1 font-medium bg-rose-50 dark:bg-rose-950/40 px-2 py-1 rounded-md border border-rose-200/60 dark:border-rose-900/40">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{item.errorMessage}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Remove Action */}

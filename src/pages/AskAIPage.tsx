@@ -58,7 +58,7 @@ export const AskAIPage: React.FC = () => {
     return parts.length > 0 ? parts : str;
   };
 
-  // Render message content with rich clickable CDN links
+  // Render message content with rich clickable CDN links & rendered photos
   const renderMessageContent = (text: string) => {
     const lines = text.split('\n');
 
@@ -69,6 +69,39 @@ export const AskAIPage: React.FC = () => {
             return <div key={lIdx} className="h-1.5" />;
           }
 
+          // 1. Direct Markdown Image preview ![alt](url)
+          const imgMatch = line.trim().match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+          if (imgMatch) {
+            const alt = imgMatch[1];
+            const url = imgMatch[2];
+            return (
+              <div key={lIdx} className="my-2.5">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block group max-w-sm rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  title={`Buka ${alt || 'Foto'} di tab baru`}
+                >
+                  <img
+                    src={url}
+                    alt={alt || 'Foto Dokumentasi'}
+                    loading="lazy"
+                    className="w-full max-h-72 object-cover transition-transform group-hover:scale-[1.02] duration-200"
+                  />
+                  <div className="p-2.5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700/60">
+                    <span className="truncate font-medium text-slate-700 dark:text-slate-200">{alt || 'Foto Dokumentasi'}</span>
+                    <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold shrink-0">
+                      <span>Perbesar</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </span>
+                  </div>
+                </a>
+              </div>
+            );
+          }
+
+          // 2. Markdown Links [label](url)
           const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
           if (linkRegex.test(line)) {
             const parts: React.ReactNode[] = [];

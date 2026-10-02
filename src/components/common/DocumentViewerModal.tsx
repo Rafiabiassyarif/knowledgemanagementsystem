@@ -85,10 +85,10 @@ export const DocumentViewerModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                const targetUrl = (doc.fileUrl && !doc.fileUrl.startsWith('db://'))
-                  ? doc.fileUrl
-                  : `${API_BASE_URL}/documents/${doc.id}/download`;
-                downloadProtectedFile(targetUrl, `${doc.title}.${(doc.fileType || 'PDF').toLowerCase()}`)
+                const targetUrl = `${API_BASE_URL}/documents/${doc.id}/download`;
+                const ext = (doc.fileType || 'PDF').toLowerCase();
+                const filename = `${doc.title}.${ext}`;
+                downloadProtectedFile(targetUrl, filename, doc.id)
                   .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"

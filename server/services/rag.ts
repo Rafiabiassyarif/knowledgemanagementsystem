@@ -32,11 +32,14 @@ export interface IndexDocumentParams {
   metadata?: Record<string, any>;
   /** API key khusus project (opsional) — dipakai bila tersedia, fallback ke master key. */
   apiKey?: string | null;
+  /** Kode unik Knowledge Base (KB ID / namespace RAG) */
+  knowledgeBaseId?: string | null;
 }
 
 export interface QueryRagParams {
   query: string;
   organizationId?: string | null;
+  knowledgeBaseId?: string | null;
   documentIds?: string[];
   topK?: number;
   strictGrounding?: boolean;
@@ -80,7 +83,7 @@ export function getKnowledgeBaseId(organizationId?: string | null): string {
  */
 export async function indexDocumentToRag(params: IndexDocumentParams): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    const kbId = getKnowledgeBaseId(params.organizationId);
+    const kbId = params.knowledgeBaseId || getKnowledgeBaseId(params.organizationId);
 
     let contentBase64: string | null = params.contentBase64 || null;
     let textContent: string | null = params.text || null;
@@ -179,17 +182,40 @@ export async function indexDocumentToRag(params: IndexDocumentParams): Promise<{
 /**
  * Delete document from RAG Jev service
  */
-export async function deleteDocumentFromRag(documentId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function deleteDocumentFromRag(documentId: string, apiKey?: string): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
+    const bearerKey = apiKey || RAG_API_KEY;
     console.log(`[RAG SERVICE] Menghapus dokumen ID: ${documentId} dari RAG`);
-    const res = await fetch(`${RAG_BASE_URL}/api/v1/knowledge/${documentId}`, {
+    const res = await fetch(`${RAG_BASE_URL}/api/v1/knowledge/${encodeURIComponent(documentId)}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${RAG_API_KEY}`
+        'Authorization': `Bearer ${bearerKey}`
       }
     });
 
-    const result = await res.json();
+    const result = await res.json().catch(() => ({}));
+    if (res.ok) {
+      console.log(`[RAG SERVICE OK] Dokumen ID: ${documentId} berhasil dihapus dari RAG:`, result?.data || result);
+      return { success: true, data: result?.data };
+    }
+
+    // If failed and an isolated apiKey was provided, fallback to master RAG_API_KEY
+    if (apiKey && apiKey !== RAG_API_KEY) {
+      console.log(`[RAG SERVICE] Mencoba kembali menghapus ID: ${documentId} dengan master key...`);
+      const retryRes = await fetch(`${RAG_BASE_URL}/api/v1/knowledge/${encodeURIComponent(documentId)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${RAG_API_KEY}`
+        }
+      });
+      const retryResult = await retryRes.json().catch(() => ({}));
+      if (retryRes.ok) {
+        console.log(`[RAG SERVICE OK] Dokumen ID: ${documentId} berhasil dihapus dari RAG (via master key):`, retryResult?.data || retryResult);
+        return { success: true, data: retryResult?.data };
+      }
+    }
+
+    console.warn(`[RAG SERVICE WARN] Hapus dokumen ${documentId} dari RAG respon:`, result);
     return { success: res.ok, data: result?.data };
   } catch (err: any) {
     console.warn('[RAG SERVICE DELETE WARN]', err.message);
@@ -247,7 +273,7 @@ export function cleanRagOutput(text: string): string {
  */
 export async function queryRag(params: QueryRagParams): Promise<RagQueryResult> {
   try {
-    const kbId = getKnowledgeBaseId(params.organizationId);
+    const kbId = params.knowledgeBaseId || getKnowledgeBaseId(params.organizationId);
     console.log(`[RAG QUERY] Query: "${params.query}" (Target KB: ${kbId})`);
 
     const requestBody: any = {

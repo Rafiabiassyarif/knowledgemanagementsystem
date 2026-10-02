@@ -147,30 +147,9 @@ export async function uploadToKroomboxCDN(
     throw new Error('CDN response did not return a fileId.');
   }
 
-  // Poll for ready status up to 4 attempts (max ~3 seconds)
-  let finalUrl = `${CDN_BASE_URL}/api/bridge/view/${fileId}`;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    await new Promise(r => setTimeout(r, 700));
-    try {
-      const checkRes = await fetch(`${CDN_BASE_URL}/api/bridge/files/${fileId}`, {
-        headers: {
-          'x-api-key': CDN_API_KEY,
-          'Authorization': `Bearer ${CDN_JWT_TOKEN}`
-        }
-      });
-      if (checkRes.ok) {
-        const fileInfo: any = await checkRes.json();
-        if (fileInfo.status === 'ready' && fileInfo.url) {
-          finalUrl = fileInfo.url.startsWith('http') ? fileInfo.url : `${CDN_BASE_URL}${fileInfo.url}`;
-          break;
-        }
-      }
-    } catch {
-      // Continue polling
-    }
-  }
-
-  const deliveryUrl = finalUrl.startsWith('http') ? finalUrl : `${CDN_BASE_URL}${finalUrl}`;
+  const deliveryUrl = uploadData.url
+    ? (uploadData.url.startsWith('http') ? uploadData.url : `${CDN_BASE_URL}${uploadData.url}`)
+    : `${CDN_BASE_URL}/api/bridge/view/${fileId}`;
 
   return {
     fileId,

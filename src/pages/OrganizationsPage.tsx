@@ -23,16 +23,21 @@ import {
   Layers,
   Check,
   HardDrive,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles,
+  Copy
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { OrgType, Organization } from '../types';
+import { RagConnectionModal } from '../components/common/RagConnectionModal';
 
 export const OrganizationsPage: React.FC = () => {
   const { organizations, toggleOrgStatus, currentUser, deleteOrganization, currentOrganization, switchProject } = useApp();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [deletingOrg, setDeletingOrg] = useState<Organization | null>(null);
+  const [ragModalOrg, setRagModalOrg] = useState<Organization | null>(null);
+  const [copiedKbId, setCopiedKbId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -216,6 +221,7 @@ export const OrganizationsPage: React.FC = () => {
           <thead>
             <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/80 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <th className="py-3 px-4">Project</th>
+              <th className="py-3 px-4">Knowledge Base (RAG)</th>
               <th className="py-3 px-4">Kategori & Sektor</th>
               <th className="py-3 px-4">Pemilik Project</th>
               <th className="py-3 px-4 text-right">Dokumen & Berkas</th>
@@ -259,10 +265,51 @@ export const OrganizationsPage: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
-                        {org.code || '-'} · {org.type || '-'}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                          {org.code || '-'} · {org.type || '-'}
+                        </span>
+                      </div>
                     </div>
+                  </div>
+                </td>
+
+                {/* Knowledge Base & RAG Connection Column */}
+                <td className="py-3.5 px-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-[11px] font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/70 px-2 py-0.5 rounded border border-blue-200/80 dark:border-blue-800/80 shadow-xs">
+                        {org.knowledgeBase || ('kb_' + (org.code || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const kb = org.knowledgeBase || ('kb_' + (org.code || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+                          navigator.clipboard.writeText(kb);
+                          setCopiedKbId(org.id);
+                          setTimeout(() => setCopiedKbId(null), 2000);
+                        }}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Salin Kode Knowledge Base"
+                      >
+                        {copiedKbId === org.id ? (
+                          <Check className="w-3 h-3 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRagModalOrg(org)}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer w-fit group"
+                      title="Buka status koneksi dan sinkronisasi RAG"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="group-hover:underline">Connect ke RAG</span>
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-500" />
+                    </button>
                   </div>
                 </td>
 
@@ -398,7 +445,18 @@ export const OrganizationsPage: React.FC = () => {
                   <Link to={`/app/projects/${org.id}`} className="text-xs font-semibold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 block">
                     {org.name}
                   </Link>
-                  <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">{org.code || '-'} · {org.type || '-'}</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">{org.code || '-'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setRagModalOrg(org)}
+                      className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60"
+                      title="Klik untuk info koneksi RAG"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-500" />
+                      <span>{org.knowledgeBase || ('kb_' + (org.code || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_'))}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
               <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md shrink-0 ${
@@ -533,6 +591,7 @@ export const OrganizationsPage: React.FC = () => {
 
       <CreateProjectModal isOpen={createModalOpen} onClose={() => setCreateModalOpen(false)} />
       <EditOrgModal isOpen={Boolean(editingOrg)} onClose={() => setEditingOrg(null)} org={editingOrg} />
+      <RagConnectionModal isOpen={Boolean(ragModalOrg)} organization={ragModalOrg} onClose={() => setRagModalOrg(null)} />
     </div>
   );
 };

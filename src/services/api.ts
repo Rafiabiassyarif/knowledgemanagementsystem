@@ -77,38 +77,40 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
  * Download a protected file with the JWT attached (fetch -> blob -> browser save).
  * Plain <a href> links cannot send Authorization headers, so downloads would get 401.
  */
-export async function downloadProtectedFile(url: string, filename: string): Promise<void> {
-  let downloadUrl = url;
-  if (downloadUrl.startsWith('db://')) {
-    const docId = downloadUrl.replace('db://', '');
-    downloadUrl = `${API_BASE_URL}/documents/${docId}/download`;
-  }
-
-  // Handle external CDN URLs
-  if (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://')) {
-    try {
-      const res = await fetch(downloadUrl, { mode: 'cors' });
-      if (res.ok) {
-        const blob = await res.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(blobUrl);
-        return;
-      }
-    } catch {
-      // Fallback: direct browser open/download
-      window.open(downloadUrl, '_blank');
-      return;
-    }
-  }
-
+export async function downloadProtectedFile(url: string, filename: string, docId?: string): Promise<void> {
   const token = tokenStore.get();
-  const res = await fetch(downloadUrl, {
+  let targetUrl = url;
+
+  if (docId) {
+    targetUrl = `${API_BASE_URL}/documents/${docId}/download`;
+  } else if (targetUrl.startsWith('db://')) {
+    const extractedId = targetUrl.replace('db://', '');
+    targetUrl = `${API_BASE_URL}/documents/${extractedId}/download`;
+  }
+
+  // If this is our server download endpoint, trigger native browser attachment download with token
+  if (targetUrl.includes('/documents/') && targetUrl.includes('/download')) {
+    const sep = targetUrl.includes('?') ? '&' : '?';
+    const directUrl = token ? `${targetUrl}${sep}token=${encodeURIComponent(token)}` : targetUrl;
+    const a = document.createElement('a');
+    a.href = directUrl;
+    a.setAttribute('download', filename);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if (document.body.contains(a)) document.body.removeChild(a);
+    }, 500);
+    return;
+  }
+
+  // Handle local /uploads/ URL if passed directly
+  let resolvedUrl = targetUrl;
+  if (resolvedUrl.startsWith('/uploads/')) {
+    resolvedUrl = `${API_BASE_URL.replace(/\/api\/?$/, '')}${resolvedUrl}`;
+  }
+
+  // Direct fetch blob fallback
+  const res = await fetch(resolvedUrl, {
     headers: token ? { 'Authorization': `Bearer ${token}` } : {},
   });
 
@@ -128,8 +130,10 @@ export async function downloadProtectedFile(url: string, filename: string): Prom
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(blobUrl);
+  setTimeout(() => {
+    if (document.body.contains(a)) document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  }, 500);
 }
 
 export const api = {
@@ -250,9 +254,15 @@ export const api = {
       request<{ success: boolean; message: string }>(`/documents/${id}`, {
         method: 'DELETE',
       }),
-    syncRag: () =>
-      request<{ success: boolean; message: string; count: number }>('/documents/sync-rag', {
+    update: (id: string, updates: any) =>
+      request<{ success: boolean; document?: any; message: string }>(`/documents/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }),
+    syncRag: (organizationId?: string) =>
+      request<{ success: boolean; message: string; count: number; knowledgeBase?: string }>('/documents/sync-rag', {
         method: 'POST',
+        body: JSON.stringify({ organizationId }),
       }),
   },
 

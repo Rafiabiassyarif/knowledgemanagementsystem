@@ -68,6 +68,7 @@ async function createTables() {
       id VARCHAR(64) PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       code VARCHAR(64) NOT NULL UNIQUE,
+      knowledge_base VARCHAR(100) NULL,
       type VARCHAR(100) NOT NULL,
       sector VARCHAR(255) NULL,
       province VARCHAR(100) NULL,
@@ -159,6 +160,16 @@ async function createTables() {
   if (!existingDocCols.has('cdn_file_id')) {
     await p.query('ALTER TABLE documents ADD COLUMN cdn_file_id VARCHAR(100) NULL AFTER file_url');
     console.log('[DB] Kolom cdn_file_id ditambahkan ke tabel documents.');
+  }
+  if (!existingDocCols.has('uploader_role')) {
+    await p.query("ALTER TABLE documents ADD COLUMN uploader_role VARCHAR(20) DEFAULT 'user' AFTER uploaded_by_id");
+    console.log('[DB] Kolom uploader_role ditambahkan ke tabel documents.');
+    try {
+      await p.query("UPDATE documents SET uploader_role = 'admin' WHERE uploaded_by LIKE '%Admin%' OR uploaded_by_id IN (SELECT id FROM users WHERE role IN ('admin', 'superadmin'))");
+      console.log('[DB] Dokumen admin yang sudah ada disesuaikan uploader_role = admin.');
+    } catch (e) {
+      console.warn('[DB] Gagal update role dokumen lama:', e);
+    }
   }
 
   // Users quota & subscription plan migration

@@ -332,7 +332,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Accessible documents based on role & active project
   const accessibleDocuments = useMemo(() => {
     if (!currentUser) return [];
-    const targetId = activeProjectId || currentUser.organizationId;
+    // Proyek aktif bisa kosong (akun tanpa organization_id) atau sudah tidak ada lagi
+    // (proyeknya dihapus). Fallback ke proyek pertama yang tersedia supaya daftar tidak kosong.
+    let targetId = activeProjectId || currentUser.organizationId;
+    if (organizations.length > 0 && (!targetId || !organizations.some(o => o.id === targetId))) {
+      targetId = organizations[0].id;
+    }
     if (!targetId) return [];
     let base = documents.filter(doc => !doc.organizationId || doc.organizationId === targetId);
     if (currentUser.role === 'superadmin' && !activeProjectId) {
@@ -348,18 +353,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     return base;
-  }, [currentUser, activeProjectId, documents]);
+  }, [currentUser, activeProjectId, documents, organizations]);
 
   // Accessible chunks based on role & active project
   const accessibleChunks = useMemo(() => {
     if (!currentUser) return [];
-    const targetId = activeProjectId || currentUser.organizationId;
+    // Proyek aktif bisa kosong (akun tanpa organization_id) atau sudah tidak ada lagi
+    // (proyeknya dihapus). Fallback ke proyek pertama yang tersedia supaya daftar tidak kosong.
+    let targetId = activeProjectId || currentUser.organizationId;
+    if (organizations.length > 0 && (!targetId || !organizations.some(o => o.id === targetId))) {
+      targetId = organizations[0].id;
+    }
     if (!targetId) return [];
     if (currentUser.role === 'superadmin' && !activeProjectId) {
       return chunks;
     }
     return chunks.filter(c => c.organizationId === targetId);
-  }, [currentUser, activeProjectId, chunks]);
+  }, [currentUser, activeProjectId, chunks, organizations]);
 
   // General login for all roles (Superadmin, Admin, User)
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {

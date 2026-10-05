@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { queryRag } from '../services/rag';
 import { getPool } from '../db';
-import { listKroomboxCDNFiles, createCDNSignedUrl } from '../services/cdn';
+import { listKroomboxCDNFiles, cdnViewUrl } from '../services/cdn';
 
 const router = Router();
 
@@ -78,11 +78,8 @@ async function buildAttachments(docs: any[]): Promise<any[]> {
   return Promise.all(docs.map(async (d: any) => {
     let url: string | null = null;
     if (d.cdn_file_id) {
-      try {
-        url = await createCDNSignedUrl(d.cdn_file_id, 86400);
-      } catch (signErr) {
-        console.warn(`[CHAT ATTACH SIGN WARN ${d.cdn_file_id}]`, signErr);
-      }
+      // Tautan render langsung dari CDN (inline); signed URL bisa dialihkan ke Google Drive.
+      url = cdnViewUrl(d.cdn_file_id);
     }
     if (!url) {
       if (d.file_url && (d.file_url.startsWith('http://') || d.file_url.startsWith('https://'))) {
@@ -289,17 +286,10 @@ async function handleFileRequest(
   const isFallback = matched.length === 0;
   const docsToShow = isFallback ? scored.slice(0, 3) : matched.slice(0, 4);
 
-  // 4. Resolve direct signed CDN URLs using the Kroombox CDN API Key
+  // 4. Tautan render langsung dari Kroombox Edge CDN (inline, membuka berkasnya langsung).
   for (const doc of docsToShow) {
     if (doc.cdn_file_id) {
-      try {
-        const signed = await createCDNSignedUrl(doc.cdn_file_id, 86400);
-        if (signed) {
-          doc.cdnUrl = signed;
-        }
-      } catch (signErr) {
-        console.warn(`[CDN SIGN WARN for ${doc.cdn_file_id}]`, signErr);
-      }
+      doc.cdnUrl = cdnViewUrl(doc.cdn_file_id);
     }
 
     if (!doc.cdnUrl) {

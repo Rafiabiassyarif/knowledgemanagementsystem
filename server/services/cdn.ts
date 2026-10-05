@@ -1,4 +1,12 @@
 const CDN_BASE_URL = process.env.KROOMBOX_CDN_URL || 'https://api-cdn.kroombox.com';
+
+/**
+ * URL render LANGSUNG ke berkas di Kroombox Edge CDN (inline, langsung membuka/menampilkan
+ * berkasnya). Dipakai untuk semua tautan ke pengguna supaya TIDAK dialihkan ke Google Drive.
+ */
+export function cdnViewUrl(fileId: string): string {
+  return `${CDN_BASE_URL}/api/bridge/view/${encodeURIComponent(fileId)}`;
+}
 const CDN_API_KEY = process.env.KROOMBOX_API_KEY || 'kb_6365852fe432ce3a5b304b5bece7858cc3a558f5e5b84d0e';
 const CDN_JWT_TOKEN = process.env.KROOMBOX_JWT_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwcm9qZWN0SWQiOiIyMWM0MDQwZS1jYzhkLTQ3ZjctOTZhNC1jZmExM2Q4ZWExZjkiLCJ1c2VySWQiOjgsImlhdCI6MTc5MDg0MzIzNSwiZXhwIjoxNzk4NjE5MjM1fQ.VtMHS1Z5yWrJr65DN7NU6JFZLHBG5_PNtYhlt6EO5_k';
 const CDN_PROJECT_ID = process.env.KROOMBOX_PROJECT_ID || '21c4040e-cc8d-47f7-96a4-cfa13d8ea1f9';
@@ -147,9 +155,9 @@ export async function uploadToKroomboxCDN(
     throw new Error('CDN response did not return a fileId.');
   }
 
-  const deliveryUrl = uploadData.url
-    ? (uploadData.url.startsWith('http') ? uploadData.url : `${CDN_BASE_URL}${uploadData.url}`)
-    : `${CDN_BASE_URL}/api/bridge/view/${fileId}`;
+  // Selalu pakai URL render langsung dari CDN: respons upload bisa memuat tautan
+  // Google Drive (drive.google.com/uc?...) yang tidak me-render berkas di browser.
+  const deliveryUrl = cdnViewUrl(fileId);
 
   return {
     fileId,

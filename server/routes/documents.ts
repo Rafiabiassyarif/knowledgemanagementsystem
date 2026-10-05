@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
-import { uploadToKroomboxCDN, deleteFromKroomboxCDN, createCDNSignedUrl, listKroomboxCDNFiles } from '../services/cdn';
+import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl, listKroomboxCDNFiles } from '../services/cdn';
 import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey } from '../services/ragKeys';
 
@@ -769,22 +769,34 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
     const safeTitle = (doc.title || doc.file_name || 'dokumen').replace(/[/\\?%*:|"<>]/g, '_');
     const downloadFileName = safeTitle.toLowerCase().endsWith(`.${ext}`) ? safeTitle : `${safeTitle}.${ext}`;
 
-    // 1. CDN file ID -> stream directly dengan Content-Disposition: attachment!
-    if (doc.cdn_file_id) {
+    // 1. CDN file ID -> stream langsung dari URL render CDN (bukan signed/Google Drive).
+    //    Foto/gambar dikirim inline supaya langsung tampil di browser.
+    const isImageDoc = doc.repository_type === 'photo'
+      || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext);
+    const cdnUrl = doc.cdn_file_id ? cdnViewUrl(doc.cdn_file_id) : null;
+    if (cdnUrl) {
       try {
-        const signedUrl = await createCDNSignedUrl(doc.cdn_file_id, 86400);
-        if (signedUrl) {
-          const cdnRes = await fetch(signedUrl);
-          if (cdnRes.ok && cdnRes.body) {
-            res.setHeader('Content-Type', cdnRes.headers.get('content-type') || 'application/octet-stream');
-            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
-            if (cdnRes.headers.get('content-length')) {
-              res.setHeader('Content-Length', cdnRes.headers.get('content-length')!);
-            }
-            Readable.fromWeb(cdnRes.body as any).pipe(res);
-            return;
-          }
+        // CDN menyinkronkan berkas secara async: sesaat setelah upload statusnya "pending"
+        // (302 -> drive...?id=pending). Coba beberapa kali sebelum menyerah.
+        let cdnRes = await fetch(cdnUrl);
+        for (let attempt = 0; attempt < 3 && !cdnRes.ok; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          cdnRes = await fetch(cdnUrl);
         }
+        if (cdnRes.ok && cdnRes.body) {
+          res.setHeader('Content-Type', cdnRes.headers.get('content-type') || 'application/octet-stream');
+          res.setHeader('Content-Disposition', isImageDoc
+            ? `inline; filename="${encodeURIComponent(downloadFileName)}"`
+            : `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
+          if (cdnRes.headers.get('content-length')) {
+            res.setHeader('Content-Length', cdnRes.headers.get('content-length')!);
+          }
+          Readable.fromWeb(cdnRes.body as any).pipe(res);
+          return;
+        }
+        // Berkas belum siap di CDN -> jangan kirim PDF palsu; arahkan browser ke berkas CDN.
+        res.redirect(cdnUrl);
+        return;
       } catch (cdnErr) {
         console.warn('[CDN STREAM WARN]', cdnErr);
       }
@@ -796,7 +808,9 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
         const extRes = await fetch(doc.file_url);
         if (extRes.ok && extRes.body) {
           res.setHeader('Content-Type', extRes.headers.get('content-type') || 'application/octet-stream');
-          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
+          res.setHeader('Content-Disposition', isImageDoc
+            ? `inline; filename="${encodeURIComponent(downloadFileName)}"`
+            : `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
           if (extRes.headers.get('content-length')) {
             res.setHeader('Content-Length', extRes.headers.get('content-length')!);
           }

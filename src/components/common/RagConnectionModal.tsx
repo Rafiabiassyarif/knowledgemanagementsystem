@@ -103,11 +103,6 @@ console.log(data.answer);`;
     }
   };
 
-  const handleOpenChat = () => {
-    switchProject(org.id);
-    onClose();
-    navigate('/app/chat');
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -226,7 +221,7 @@ console.log(data.answer);`;
             </div>
           </div>
 
-          {/* Quick Actions (Sync RAG & Test Chat) */}
+          {/* Quick Actions (Sinkronisasi RAG) */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
             <button
               type="button"
@@ -236,14 +231,6 @@ console.log(data.answer);`;
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Menghubungkan ke RAG...' : 'Sinkronkan Dokumen ke RAG Sekarang'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleOpenChat}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
-            >
-              <MessageSquare className="w-4 h-4 text-blue-500" />
-              <span>Test Tanya AI</span>
             </button>
           </div>
 

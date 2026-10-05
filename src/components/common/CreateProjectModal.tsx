@@ -229,8 +229,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <span className="text-slate-500 dark:text-slate-400">Setiap berkas PDF, Word, atau media yang Anda upload otomatis terkelompok di sini dan tidak akan bocor ke project lain.</span>
             </div>
             <div className="p-2.5 rounded-lg bg-white/90 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-700/60 space-y-0.5">
-              <span className="font-semibold text-slate-800 dark:text-slate-200 block">💬 Tanya AI Terfokus</span>
-              <span className="text-slate-500 dark:text-slate-400">Saat Anda bertanya di menu Tanya AI, jawaban hanya dirangkum dari dokumen yang ada di Knowledge Base project ini.</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200 block">🔗 Kredensial RAG per Project</span>
+              <span className="text-slate-500 dark:text-slate-400">Setiap project memakai API key RAG sendiri, sehingga akses setiap Knowledge Base tetap terpisah dan terkendali.</span>
             </div>
           </div>
         </div>

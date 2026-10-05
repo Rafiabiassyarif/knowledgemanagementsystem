@@ -284,7 +284,7 @@ export const OrganizationDetailPage: React.FC = () => {
                   <span className="text-emerald-700 dark:text-emerald-400 font-medium">Ketat (Zero-Leakage)</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500 dark:text-slate-400">Pencarian Chat AI</span>
+                  <span className="text-slate-500 dark:text-slate-400">Isolasi Knowledge Base</span>
                   <span className="text-blue-600 dark:text-blue-400 font-medium">Khusus Project Ini</span>
                 </div>
                 <div className="flex justify-between py-1.5">
@@ -497,10 +497,10 @@ export const OrganizationDetailPage: React.FC = () => {
                 3
               </div>
               <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                Pencarian Chat AI Terfokus
+                Sinkronisasi Berkas ke RAG
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Saat Anda membuka menu <strong>Tanya AI</strong>, asisten cerdas memfilter pencarian dokumen hanya dari Knowledge Base project ini sehingga jawaban selalu akurat dan relevan.
+                Seluruh berkas project ini dapat dikirim ulang ke Knowledge Base-nya lewat panel RAG project, sehingga indeks di server RAG selalu sinkron dengan dokumen terbaru.
               </p>
             </div>
           </div>

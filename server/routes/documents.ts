@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
-import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl, listKroomboxCDNFiles } from '../services/cdn';
+import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl } from '../services/cdn';
 import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey } from '../services/ragKeys';
 
@@ -93,46 +93,6 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       ragStatus: 'indexed'
     }));
 
-    // Merge any assets stored directly on Kroombox Edge CDN (khusus admin/superadmin)
-    if (req.authUser && req.authUser.role !== 'user') {
-      try {
-        const cdnFiles = await listKroomboxCDNFiles();
-      if (Array.isArray(cdnFiles) && cdnFiles.length > 0) {
-        for (const cf of cdnFiles) {
-          const exists = documents.some(d => d.cdnFileId === cf.id || (cf.name && d.title.toLowerCase() === cf.name.toLowerCase().replace(/\.[^/.]+$/, "")));
-          if (!exists) {
-            const isImg = (cf.mime_type || '').startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp'].some(ext => cf.name.toLowerCase().endsWith(ext));
-            documents.push({
-              id: `cdn-${cf.id}`,
-              organizationId: (organizationId && organizationId !== 'all') ? (organizationId as string) : 'all',
-              organizationName: 'Repositori Digital',
-              title: cf.name.replace(/\.[^/.]+$/, ""),
-              category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital',
-              repositoryType: isImg ? 'photo' : 'document',
-              fileType: cf.name.split('.').pop()?.toUpperCase() || (isImg ? 'JPG' : 'TXT'),
-              fileSizeKb: Math.round((cf.size || 1024) / 1024) || 1,
-              fileUrl: cf.url || `https://api-cdn.kroombox.com/api/bridge/view/${cf.id}`,
-              cdnFileId: cf.id,
-              year: new Date().getFullYear(),
-              department: 'Media & Aset Digital',
-              summary: `Berkas resmi tersimpan aman (${cf.name})`,
-              tags: ['cdn', isImg ? 'photo' : 'document', 'kroombox'],
-              notes: 'Tersimpan di Edge CDN',
-              uploadedBy: 'CDN Storage',
-              uploadedById: null,
-              uploaderRole: 'admin',
-              uploadedAt: cf.created_at || new Date().toISOString(),
-              chunksCount: 1,
-              totalTokens: 100,
-              ragStatus: 'indexed'
-            });
-          }
-        }
-      }
-    } catch (cdnErr) {
-      console.warn('[CDN FETCH FOR DOCS WARN]', cdnErr);
-    }
-  }
 
     res.json({ success: true, documents });
   } catch (err: any) {

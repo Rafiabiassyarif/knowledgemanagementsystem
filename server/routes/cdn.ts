@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { getPool } from '../db';
 import { 
   getKroomboxCDNHealth, 
   getKroomboxCDNStats, 
@@ -49,7 +50,16 @@ router.get('/files', async (req: Request, res: Response): Promise<void> => {
     const limit = req.query.limit ? Number(req.query.limit) : 50;
 
     const files = await listKroomboxCDNFiles({ search, type, limit });
-    res.json({ success: true, files });
+
+    // Hanya berkas yang terdaftar sebagai dokumen KMS ini yang ditampilkan.
+    // Akun Kroombox CDN dipakai bersama beberapa aplikasi, sedangkan listing
+    // /api/bridge/files mengembalikan SEMUA berkas akun tersebut.
+    const p = getPool();
+    const [own] = await p.query<any[]>('SELECT DISTINCT cdn_file_id FROM documents WHERE cdn_file_id IS NOT NULL');
+    const ownIds = new Set(own.map((r: any) => r.cdn_file_id));
+    const ownFiles = (Array.isArray(files) ? files : []).filter((f: any) => ownIds.has(f.id));
+
+    res.json({ success: true, files: ownFiles });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err?.message || 'Gagal mengambil daftar berkas CDN.' });
   }

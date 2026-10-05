@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { queryRag } from '../services/rag';
 import { getPool } from '../db';
-import { listKroomboxCDNFiles, cdnViewUrl } from '../services/cdn';
+import { cdnViewUrl } from '../services/cdn';
 
 const router = Router();
 
@@ -187,38 +187,6 @@ async function handleFileRequest(
     console.warn('[DB DOCS FOR CHAT ERROR]', err);
   }
 
-  // 2. Fetch direct files from Kroombox Edge CDN using API Key
-  try {
-    const cdnFiles = await listKroomboxCDNFiles();
-    if (Array.isArray(cdnFiles) && cdnFiles.length > 0) {
-      for (const cf of cdnFiles) {
-        const alreadyInDb = rows.some(
-          r => r.cdn_file_id === cf.id || (r.file_name && r.file_name.toLowerCase() === cf.name.toLowerCase())
-        );
-        if (!alreadyInDb) {
-          const isImg = (cf.mime_type || '').startsWith('image/') ||
-            ['png', 'jpg', 'jpeg', 'webp'].some(ext => cf.name.toLowerCase().endsWith(ext));
-          rows.push({
-            id: `cdn-${cf.id}`,
-            organization_id: orgId || 'all',
-            organization_name: orgName,
-            title: cf.name.replace(/\.[^/.]+$/, ""),
-            category: isImg ? 'Galeri Dokumentasi' : 'Arsip Digital',
-            repository_type: isImg ? 'photo' : 'document',
-            file_type: cf.name.split('.').pop()?.toUpperCase() || (isImg ? 'JPG' : 'FILE'),
-            file_size_kb: Math.round((cf.size || 1024) / 1024) || 1,
-            file_url: cf.url,
-            file_name: cf.name,
-            cdn_file_id: cf.id,
-            summary: `Berkas resmi tersimpan aman (${cf.name})`,
-            department: 'Media & Aset Digital'
-          });
-        }
-      }
-    }
-  } catch (cdnErr) {
-    console.warn('[CHAT CDN LIST FETCH WARN]', cdnErr);
-  }
 
   if (rows.length === 0) {
     return {

@@ -691,6 +691,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       creatorRole: currentUser?.role || 'admin'
     }).catch(e => console.error('[BACKEND CREATE PROJECT ERROR]', e));
 
+    // Otomatis beralih ke project baru yang masih bersih dan kosong
+    switchProject(newId);
+
     const newLog: ActivityLog = {
       id: `act-${Date.now()}`,
       organizationId: newId,

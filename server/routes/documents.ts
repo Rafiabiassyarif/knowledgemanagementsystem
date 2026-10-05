@@ -706,6 +706,51 @@ router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
   }
 });
 
+// 5b. Delete document (Hapus dari MySQL, RAG Service, dan Kroombox CDN)
+router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const p = getPool();
+
+    const [rows] = await p.query<any[]>('SELECT * FROM documents WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan.' });
+      return;
+    }
+
+    const doc = rows[0];
+
+    // Hapus dari database MySQL
+    await p.query('DELETE FROM documents WHERE id = ?', [id]);
+
+    // Hapus dari RAG Service secara asinkron
+    deleteDocumentFromRag(doc.id).catch(e => console.warn('[RAG DELETE DOC WARN]', e?.message || e));
+
+    // Hapus dari Kroombox CDN jika ada
+    if (doc.cdn_file_id) {
+      deleteFromKroomboxCDN(doc.cdn_file_id).catch(e => console.warn('[CDN DELETE WARN]', e?.message || e));
+    }
+
+    // Catat log aktivitas
+    await p.query(`
+      INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+      VALUES (?, ?, ?, ?, ?, 'Menghapus Dokumen', ?, 'document')
+    `, [
+      `act-${Date.now()}`,
+      doc.organization_id,
+      doc.organization_id,
+      req.authUser?.name || 'Pengguna',
+      req.authUser?.role || 'user',
+      doc.title
+    ]);
+
+    res.json({ success: true, message: `Dokumen "${doc.title}" berhasil dihapus dari sistem dan RAG.` });
+  } catch (err: any) {
+    console.error('[DELETE DOC ERROR]', err);
+    res.status(500).json({ success: false, message: err?.message || 'Gagal menghapus dokumen.' });
+  }
+});
+
 // 6. Download document (Real streaming dari Kroombox CDN / URL / Local dengan header attachment)
 router.get('/:id/download', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {

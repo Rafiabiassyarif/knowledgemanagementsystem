@@ -165,15 +165,27 @@ export const api = {
         body: JSON.stringify(data),
       }),
     forgotPassword: (email: string) =>
-      request<{ success: boolean; message: string; mailSent: boolean }>('/auth/forgot-password', {
+      request<{ success: boolean; message: string; mailSent: boolean; code?: string; email?: string; resetLink?: string; mailError?: string }>('/auth/forgot-password', {
         method: 'POST',
         body: JSON.stringify({ email }),
       }),
-    resetPassword: (token: string, newPassword: string) =>
-      request<{ success: boolean; message: string }>('/auth/reset-password', {
+    verifyResetCode: (email: string, code: string) =>
+      request<{ success: boolean; message: string; email?: string }>('/auth/verify-reset-code', {
         method: 'POST',
-        body: JSON.stringify({ token, newPassword }),
+        body: JSON.stringify({ email, code }),
       }),
+    resetPassword: (
+      tokenOrPayload: string | { email?: string; code?: string; token?: string; newPassword: string },
+      newPassword?: string
+    ) => {
+      const body = typeof tokenOrPayload === 'string'
+        ? { token: tokenOrPayload, newPassword }
+        : tokenOrPayload;
+      return request<{ success: boolean; message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
   },
 
   // 2. Organizations API

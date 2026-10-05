@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
-import { isMailConfigured, sendMail, resetPasswordEmail } from '../services/mailer';
+import { isMailConfigured, sendMail, resetPasswordEmail, resetPasswordOtpEmail, mailSender } from '../services/mailer';
 import { generateToken, requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -347,7 +347,7 @@ router.put('/change-password/:id', requireAuth, async (req: Request, res: Respon
 // Lupa Sandi (nyata): token sekali pakai + email via Gmail API
 // ============================================================
 const RESET_TTL_MINUTES = 60;
-const appBaseUrl = () => (process.env.APP_BASE_URL || 'https://ragkms.aiones.app').replace(/\/+$/, '');
+const appBaseUrl = () => (process.env.APP_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 function saveEnv(updates: Record<string, string>) {
   const envPath = path.resolve(process.cwd(), '.env');
@@ -361,67 +361,126 @@ function saveEnv(updates: Record<string, string>) {
   fs.writeFileSync(envPath, lines.join('\n'));
 }
 
-// 1. Permintaan tautan pemulihan (jawaban selalu sama agar email terdaftar tidak bocor)
+// 1. Permintaan kode verifikasi pemulihan sandi (6-digit OTP dikirim ke email)
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   try {
-    const email = String(req.body?.email || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email) {
       res.status(400).json({ success: false, message: 'Alamat email wajib diisi.' });
       return;
     }
 
     const p = getPool();
-    const [rows] = await p.query<any[]>('SELECT id, name, email FROM users WHERE LOWER(email) = LOWER(?)', [email]);
-    const generic = 'Permintaan diterima. Bila email terdaftar, tautan pemulihan sudah dibuat.';
+    const [rows] = await p.query<any[]>('SELECT id, name, email, status FROM users WHERE LOWER(email) = ?', [email]);
 
-    if (rows.length === 0) {
-      res.json({ success: true, message: generic, mailSent: false });
+    const user = rows[0];
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'Alamat email ini belum terdaftar di sistem. Silakan periksa kembali email Anda atau daftar akun baru.'
+      });
       return;
     }
 
-    const user = rows[0];
-    const token = crypto.randomBytes(32).toString('hex');
+    if (user.status === 'suspended' || user.status === 'inactive') {
+      res.status(403).json({
+        success: false,
+        message: 'Akun Anda sedang dinonaktifkan. Silakan hubungi administrator.'
+      });
+      return;
+    }
+
+    // Generate kode OTP 6 digit angka
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000);
 
+    // Hapus kode lama yang belum terpakai untuk user ini
     await p.query('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL', [user.id]);
     await p.query(
       'INSERT INTO password_resets (id, user_id, email, token, expires_at) VALUES (?, ?, ?, ?, ?)',
-      [`pr-${Date.now()}`, user.id, user.email, token, expiresAt]
+      [`pr-${Date.now()}`, user.id, user.email, otpCode, expiresAt]
     );
 
-    const link = `${appBaseUrl()}/reset-password?token=${token}`;
     let mailSent = false;
+    let mailError = '';
+
     if (isMailConfigured()) {
       try {
         await sendMail({
           to: user.email,
-          subject: 'Atur Ulang Kata Sandi - KMS BUMD',
-          html: resetPasswordEmail(link, user.name, RESET_TTL_MINUTES)
+          subject: `${otpCode} adalah Kode Verifikasi Pemulihan Kata Sandi Anda - KMS BUMD`,
+          html: resetPasswordOtpEmail(otpCode, user.name, RESET_TTL_MINUTES)
         });
         mailSent = true;
-        console.log(`[MAIL OK] Tautan pemulihan dikirim ke ${user.email}.`);
+        console.log(`[MAIL OK] Kode OTP ${otpCode} terkirim ke ${user.email}.`);
       } catch (mailErr: any) {
-        console.error('[MAIL ERROR]', mailErr?.message || mailErr);
+        mailError = mailErr?.message || String(mailErr);
+        console.error('[MAIL ERROR]', mailError);
       }
     } else {
-      console.warn(`[MAIL BELUM DIKONFIGURASI] Tautan pemulihan untuk ${user.email}: ${link}`);
+      console.warn(`[MAIL BELUM DIKONFIGURASI] Kode OTP untuk ${user.email}: ${otpCode}`);
+      mailError = `Akun pengirim Gmail (${mailSender()}) belum dihubungkan via Google OAuth atau App Password.`;
     }
 
-    res.json({ success: true, message: generic, mailSent });
+    res.json({
+      success: true,
+      message: mailSent
+        ? `Kode verifikasi 6 digit telah berhasil dikirim ke email ${user.email}.`
+        : `Email belum dapat dikirim: ${mailError || 'Layanan pengiriman email belum siap.'}`,
+      mailSent,
+      email: user.email,
+      // Bila email berhasil dikirim, kode TIDAK dikembalikan ke client agar aman (harus dibaca dari email).
+      code: !mailSent ? otpCode : undefined,
+      mailError: mailError || undefined
+    });
   } catch (err: any) {
     console.error('[FORGOT PASSWORD ERROR]', err);
-    res.status(500).json({ success: false, message: 'Gagal memproses permintaan pemulihan.' });
+    res.status(500).json({ success: false, message: 'Gagal memproses permintaan kode pemulihan.' });
   }
 });
 
-// 2. Simpan kata sandi baru dari token pemulihan
+// 2. Verifikasi kode OTP 6 digit
+router.post('/verify-reset-code', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const code = String(req.body?.code || req.body?.token || '').trim();
+
+    if (!code) {
+      res.status(400).json({ success: false, message: 'Kode verifikasi wajib diisi.' });
+      return;
+    }
+
+    const p = getPool();
+    let query = 'SELECT id, user_id, email FROM password_resets WHERE token = ? AND used_at IS NULL AND expires_at > NOW()';
+    const params: any[] = [code];
+
+    if (email) {
+      query += ' AND LOWER(email) = ?';
+      params.push(email);
+    }
+
+    const [rows] = await p.query<any[]>(query, params);
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, message: 'Kode verifikasi tidak valid atau telah kedaluwarsa.' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Kode verifikasi valid.', email: rows[0].email });
+  } catch (err: any) {
+    console.error('[VERIFY CODE ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal memverifikasi kode.' });
+  }
+});
+
+// 3. Simpan kata sandi baru menggunakan kode OTP 6 digit
 router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
   try {
-    const token = String(req.body?.token || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const code = String(req.body?.code || req.body?.token || '').trim();
     const newPassword = String(req.body?.newPassword || '');
 
-    if (!token) {
-      res.status(400).json({ success: false, message: 'Token pemulihan tidak ada.' });
+    if (!code) {
+      res.status(400).json({ success: false, message: 'Kode verifikasi wajib diisi.' });
       return;
     }
     if (newPassword.length < 6) {
@@ -430,34 +489,52 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
     }
 
     const p = getPool();
-    const [rows] = await p.query<any[]>(
-      'SELECT id, user_id FROM password_resets WHERE token = ? AND used_at IS NULL AND expires_at > NOW()',
-      [token]
-    );
+    let query = 'SELECT id, user_id, email FROM password_resets WHERE token = ? AND used_at IS NULL AND expires_at > NOW()';
+    const params: any[] = [code];
+
+    if (email) {
+      query += ' AND LOWER(email) = ?';
+      params.push(email);
+    }
+
+    const [rows] = await p.query<any[]>(query, params);
     if (rows.length === 0) {
-      res.status(400).json({ success: false, message: 'Tautan tidak valid atau sudah kedaluwarsa.' });
+      res.status(400).json({ success: false, message: 'Kode verifikasi tidak valid atau telah kedaluwarsa.' });
       return;
     }
 
     const hash = await bcrypt.hash(newPassword, 10);
     await p.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, rows[0].user_id]);
     await p.query('UPDATE password_resets SET used_at = NOW() WHERE id = ?', [rows[0].id]);
-    console.log(`[RESET SANDI] Kata sandi ${rows[0].user_id} diperbarui lewat tautan pemulihan.`);
+    console.log(`[RESET SANDI OTP OK] Kata sandi ${rows[0].user_id} (${rows[0].email}) berhasil diubah dengan OTP ${code}.`);
 
-    res.json({ success: true, message: 'Kata sandi berhasil diubah. Silakan masuk dengan kata sandi baru.' });
+    res.json({ success: true, message: 'Kata sandi berhasil diubah! Silakan masuk dengan kata sandi baru Anda.' });
   } catch (err: any) {
     console.error('[RESET PASSWORD ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal mengubah kata sandi.' });
   }
 });
 
-// 3. Sambungkan akun Gmail pengirim (sekali saja) -> simpan refresh token ke .env
-router.get('/google/connect', requireAuth, (_req: Request, res: Response): void => {
+// 3. Sambungkan akun Gmail pengirim / Login Google OAuth
+router.get('/google/connect', (_req: Request, res: Response): void => {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID || '',
     redirect_uri: `${appBaseUrl()}/api/auth/google/callback`,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/gmail.send',
+    scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true'
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+router.get('/google/login', (_req: Request, res: Response): void => {
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID || '',
+    redirect_uri: `${appBaseUrl()}/api/auth/google/callback`,
+    response_type: 'code',
+    scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true'
@@ -484,34 +561,116 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
       })
     });
     const data: any = await tokenRes.json();
-    if (!tokenRes.ok || !data.refresh_token) {
+    if (!tokenRes.ok || (!data.access_token && !data.refresh_token)) {
       console.error('[GOOGLE OAUTH ERROR]', data);
-      res.status(400).send(`Gagal menukar kode: ${data.error_description || data.error || 'refresh_token tidak diterima'}`);
+      res.status(400).send(`Gagal menukar kode: ${data.error_description || data.error || 'token tidak diterima'}`);
       return;
     }
 
-    const profRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-      headers: { Authorization: `Bearer ${data.access_token}` }
-    });
-    const prof: any = await profRes.json();
-    const sender = prof?.emailAddress || '';
+    let userEmail = '';
+    let userName = '';
+    let userPicture = '';
 
-    saveEnv({
-      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
-      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
-      GOOGLE_REFRESH_TOKEN: data.refresh_token,
-      GMAIL_SENDER: sender
-    });
-    console.log(`[GOOGLE OAUTH OK] Pengirim email: ${sender}`);
+    try {
+      const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${data.access_token}` }
+      });
+      if (userinfoRes.ok) {
+        const info: any = await userinfoRes.json();
+        userEmail = info.email || '';
+        userName = info.name || '';
+        userPicture = info.picture || '';
+      }
+    } catch (e) {
+      console.warn('[USERINFO FETCH WARN]', e);
+    }
 
-    res.send(`<!doctype html><meta charset="utf-8"><body style="font-family:Segoe UI,Arial,sans-serif;padding:40px;color:#0f172a">
-      <h2>Email pengirim berhasil disambungkan</h2>
-      <p>Akun pengirim: <b>${sender || '(tidak terbaca)'}</b></p>
-      <p>Refresh token sudah tersimpan. Fitur lupa sandi kini mengirim email sungguhan.</p>
-      <p><a href="/login">Kembali ke aplikasi</a></p></body>`);
+    if (!userEmail) {
+      try {
+        const profRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+          headers: { Authorization: `Bearer ${data.access_token}` }
+        });
+        const prof: any = await profRes.json();
+        userEmail = prof?.emailAddress || '';
+      } catch (e) {
+        console.warn('[GMAIL PROFILE FETCH WARN]', e);
+      }
+    }
+
+    const sender = userEmail || process.env.GMAIL_SENDER || 'gzzzefan@gmail.com';
+
+    // Simpan refresh token ke .env bila diterima
+    if (data.refresh_token) {
+      saveEnv({
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+        GOOGLE_REFRESH_TOKEN: data.refresh_token,
+        GMAIL_SENDER: sender
+      });
+      console.log(`[GOOGLE OAUTH OK] Refresh token tersimpan untuk pengirim: ${sender}`);
+    }
+
+    // Buat atau temukan user di database MySQL
+    const p = getPool();
+    let [userRows] = await p.query<any[]>('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [sender]);
+    let targetUser = userRows[0];
+    if (!targetUser) {
+      const newUserId = `usr-${Date.now()}`;
+      const initials = (userName || sender).slice(0, 2).toUpperCase();
+      await p.query(
+        `INSERT INTO users (id, name, email, role, status, avatar_initials, avatar_url) VALUES (?, ?, ?, 'admin', 'active', ?, ?)`,
+        [newUserId, userName || sender.split('@')[0], sender, initials, userPicture || null]
+      );
+      [userRows] = await p.query<any[]>('SELECT * FROM users WHERE id = ?', [newUserId]);
+      targetUser = userRows[0];
+    }
+
+    const appToken = generateToken({
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
+      role: targetUser.role,
+      organizationId: targetUser.organization_id
+    });
+
+    const userPayload = JSON.stringify({
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
+      role: targetUser.role,
+      organizationId: targetUser.organization_id,
+      avatarUrl: targetUser.avatar_url || userPicture || null,
+      avatarInitials: targetUser.avatar_initials || 'GZ',
+      status: targetUser.status
+    });
+
+    res.send(`<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <title>Google Berhasil Terhubung</title>
+  <script>
+    localStorage.setItem('kms_auth_token', ${JSON.stringify(appToken)});
+    localStorage.setItem('kms_current_user', ${JSON.stringify(userPayload)});
+    setTimeout(function() {
+      window.location.href = '/app';
+    }, 1500);
+  </script>
+</head>
+<body style="font-family:Segoe UI,Roboto,sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <div style="background:#1e293b;padding:36px;border-radius:24px;box-shadow:0 20px 35px rgba(0,0,0,0.4);text-align:center;max-width:440px;border:1px solid #334155;">
+    <div style="width:60px;height:60px;background:#10b98120;border:1px solid #10b98140;color:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px;">✓</div>
+    <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;">Akun Google Berhasil Terhubung!</h2>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 20px;line-height:1.6;">
+      Akun <b>${sender}</b> telah aktif. Layanan email pemulihan lupa sandi dan login otomatis siap digunakan.
+    </p>
+    <a href="/app" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 28px;border-radius:14px;">Masuk ke Aplikasi →</a>
+  </div>
+</body>
+</html>`);
   } catch (err: any) {
     console.error('[GOOGLE OAUTH ERROR]', err);
-    res.status(500).send('Gagal menyambungkan akun Google.');
+    res.status(500).send('Gagal menyambungkan akun Google: ' + (err?.message || err));
   }
 });
 

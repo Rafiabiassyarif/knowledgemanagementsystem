@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey, revokeProjectRagKey } from '../services/ragKeys';
+import { deleteDocumentFromRag } from '../services/rag';
+import { deleteFromKroomboxCDN } from '../services/cdn';
 
 const router = Router();
 
@@ -147,11 +149,17 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Generate or clean knowledge base code
+    // Generate or clean knowledge base code (selalu unik per project agar tidak tabrakan di RAG)
+    const baseSlug = (code.trim() || name.trim() || 'prj')
+      .toLowerCase()
+      .replace(/^prj_/, '')
+      .replace(/[^a-z0-9_]/g, '_')
+      .slice(0, 18);
+    const shortRandom = Math.random().toString(36).substring(2, 6);
+
     let finalKb = (knowledgeBase || knowledge_base || '').trim();
     if (!finalKb) {
-      const slug = (code.trim() || name.trim() || 'utama').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 30);
-      finalKb = 'kb_' + (slug.startsWith('prj_') ? slug.replace('prj_', '') : slug);
+      finalKb = `kb_${baseSlug}_${shortRandom}`;
     } else {
       finalKb = finalKb.toLowerCase().replace(/[^a-z0-9_]/g, '_');
       if (!finalKb.startsWith('kb_')) {
@@ -284,13 +292,40 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     const { id } = req.params;
     const p = getPool();
 
-    const [rows] = await p.query<any[]>('SELECT name FROM organizations WHERE id = ?', [id]);
+    const [rows] = await p.query<any[]>('SELECT name, knowledge_base FROM organizations WHERE id = ?', [id]);
     if (rows.length === 0) {
       res.status(404).json({ success: false, message: 'Proyek tidak ditemukan.' });
       return;
     }
 
     const orgName = rows[0].name;
+    const targetKb = rows[0].knowledge_base;
+
+    // 1. Ambil semua dokumen project untuk dibersihkan dari RAG dan CDN
+    const [docs] = await p.query<any[]>('SELECT id, cdn_file_id FROM documents WHERE organization_id = ?', [id]);
+    for (const doc of docs) {
+      deleteDocumentFromRag(doc.id).catch(e => console.warn('[RAG DELETE DOC WARN]', e?.message || e));
+      if (doc.cdn_file_id) {
+        deleteFromKroomboxCDN(doc.cdn_file_id).catch(e => console.warn('[CDN DELETE WARN]', e?.message || e));
+      }
+    }
+
+    // 2. Bersihkan sisa dokumen di RAG untuk KB ini (bila ada)
+    if (targetKb) {
+      fetch(`${process.env.RAG_BASE_URL || 'https://rag.aiones.app'}/api/v1/knowledge?knowledge_base_id=${encodeURIComponent(targetKb)}&limit=100`, {
+        headers: { 'Authorization': `Bearer ${process.env.RAG_API_KEY || ''}` }
+      })
+      .then(r => r.json())
+      .then(async (d: any) => {
+        const ragDocs = d?.data?.documents || [];
+        for (const rd of ragDocs) {
+          if (rd?.document_id) {
+            await deleteDocumentFromRag(rd.document_id);
+          }
+        }
+      })
+      .catch(e => console.warn('[RAG CLEANUP KB WARN]', e?.message || e));
+    }
 
     // Reset organization_id in users
     await p.query('UPDATE users SET organization_id = NULL, org_join_status = "none" WHERE organization_id = ?', [id]);
@@ -306,7 +341,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
       VALUES (?, NULL, NULL, 'Admin', 'admin', 'Menghapus Proyek', ?, 'organization')
     `, [`act-${Date.now()}`, orgName]);
 
-    res.json({ success: true, message: `Proyek ${orgName} berhasil dihapus.` });
+    res.json({ success: true, message: `Proyek ${orgName} berhasil dihapus beserta memorinya di RAG.` });
   } catch (err: any) {
     console.error('[DELETE ORG ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal menghapus proyek.' });

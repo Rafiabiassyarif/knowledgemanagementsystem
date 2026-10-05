@@ -13,6 +13,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { JoinOrgPage } from './pages/JoinOrgPage';
 import { LandingPage } from './pages/LandingPage';
 // SEMBUNYI SEMENTARA: halaman manajemen paket & kuota belum dipublikasikan
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/join-org" element={<Navigate to="/app/join-org" replace />} />
 
           {/* Unified Application Routes for all roles at /app */}

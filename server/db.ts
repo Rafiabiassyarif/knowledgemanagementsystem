@@ -234,6 +234,22 @@ async function createTables() {
       ADD COLUMN organization_name VARCHAR(255) NULL AFTER organization_code,
       ADD COLUMN department VARCHAR(255) NULL AFTER applicant_email`);
   }
+  // 6. Token pemulihan sandi (lupa sandi: sekali pakai + kedaluwarsa)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(64) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      token VARCHAR(128) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_pr_token (token),
+      INDEX idx_pr_user (user_id)
+    )
+  `);
+
+
 }
 
 async function seedInitialData() {
@@ -267,7 +283,8 @@ async function seedInitialData() {
       [demoHash, defaultOrgId]
     );
   } else {
-    await p.query('UPDATE users SET password_hash = ?, role = "admin", status = "active", plan = "enterprise", doc_quota = 999 WHERE email = "admin@kms.id"', [demoHash]);
+    // Sandi akun demo tidak ditimpa lagi, agar hasil reset sandi tidak hilang saat restart.
+    await p.query('UPDATE users SET role = "admin", status = "active", plan = "enterprise", doc_quota = 999 WHERE email = "admin@kms.id"');
   }
 
   // 3. Ensure User Dummy account exists (user@kms.id / password123)
@@ -280,6 +297,6 @@ async function seedInitialData() {
       [demoHash, defaultOrgId]
     );
   } else {
-    await p.query('UPDATE users SET password_hash = ?, role = "user", status = "active" WHERE email = "user@kms.id"', [demoHash]);
+    await p.query('UPDATE users SET role = "user", status = "active" WHERE email = "user@kms.id"');
   }
 }

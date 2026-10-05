@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthLayout } from '../components/layout/AuthLayout';
-import { Mail, ArrowLeft, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2, ArrowRight, AlertTriangle } from 'lucide-react';
+import { api } from '../services/api';
 
 export const ForgotPasswordPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mailSent, setMailSent] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setError('');
+    try {
+      const res = await api.auth.forgotPassword(email.trim());
+      setMailSent(Boolean(res?.mailSent));
       setIsSubmitted(true);
-    }, 350);
+    } catch (err: any) {
+      setError(err?.message || 'Gagal memproses permintaan. Silakan coba lagi.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -32,10 +41,12 @@ export const ForgotPasswordPage: React.FC = () => {
 
           <div className="space-y-1">
             <h3 className="text-base font-bold text-slate-900">
-              Tautan Pemulihan Terkirim
+              {mailSent ? 'Tautan Pemulihan Terkirim' : 'Permintaan Diterima'}
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              Instruksi pemulihan kata sandi telah dikirim ke:
+              {mailSent
+                ? 'Tautan pemulihan kata sandi telah dikirim ke email:'
+                : 'Permintaan Anda dicatat, tetapi email belum terkirim karena layanan email belum aktif. Hubungi admin agar tautan diteruskan ke email:'}
             </p>
             <div className="inline-block px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs sm:text-sm font-mono font-semibold text-slate-800 dark:text-slate-200 mt-1">
               {email}
@@ -54,6 +65,12 @@ export const ForgotPasswordPage: React.FC = () => {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
           <div>
             <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Alamat Email Terdaftar

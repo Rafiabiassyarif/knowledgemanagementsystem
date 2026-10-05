@@ -164,6 +164,16 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
+    forgotPassword: (email: string) =>
+      request<{ success: boolean; message: string; mailSent: boolean }>('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+    resetPassword: (token: string, newPassword: string) =>
+      request<{ success: boolean; message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      }),
   },
 
   // 2. Organizations API

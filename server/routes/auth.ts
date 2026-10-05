@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
+import { isMailConfigured, sendMail, resetPasswordEmail } from '../services/mailer';
 import { generateToken, requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -336,6 +340,178 @@ router.put('/change-password/:id', requireAuth, async (req: Request, res: Respon
   } catch (err: any) {
     console.error('[CHANGE PASSWORD ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal mengubah kata sandi.' });
+  }
+});
+
+// ============================================================
+// Lupa Sandi (nyata): token sekali pakai + email via Gmail API
+// ============================================================
+const RESET_TTL_MINUTES = 60;
+const appBaseUrl = () => (process.env.APP_BASE_URL || 'https://ragkms.aiones.app').replace(/\/+$/, '');
+
+function saveEnv(updates: Record<string, string>) {
+  const envPath = path.resolve(process.cwd(), '.env');
+  const lines = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8').split(/\r?\n/) : [];
+  for (const [key, value] of Object.entries(updates)) {
+    const idx = lines.findIndex((l) => l.startsWith(`${key}=`));
+    if (idx >= 0) lines[idx] = `${key}=${value}`;
+    else lines.push(`${key}=${value}`);
+    process.env[key] = value;
+  }
+  fs.writeFileSync(envPath, lines.join('\n'));
+}
+
+// 1. Permintaan tautan pemulihan (jawaban selalu sama agar email terdaftar tidak bocor)
+router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email) {
+      res.status(400).json({ success: false, message: 'Alamat email wajib diisi.' });
+      return;
+    }
+
+    const p = getPool();
+    const [rows] = await p.query<any[]>('SELECT id, name, email FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+    const generic = 'Permintaan diterima. Bila email terdaftar, tautan pemulihan sudah dibuat.';
+
+    if (rows.length === 0) {
+      res.json({ success: true, message: generic, mailSent: false });
+      return;
+    }
+
+    const user = rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000);
+
+    await p.query('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL', [user.id]);
+    await p.query(
+      'INSERT INTO password_resets (id, user_id, email, token, expires_at) VALUES (?, ?, ?, ?, ?)',
+      [`pr-${Date.now()}`, user.id, user.email, token, expiresAt]
+    );
+
+    const link = `${appBaseUrl()}/reset-password?token=${token}`;
+    let mailSent = false;
+    if (isMailConfigured()) {
+      try {
+        await sendMail({
+          to: user.email,
+          subject: 'Atur Ulang Kata Sandi - KMS BUMD',
+          html: resetPasswordEmail(link, user.name, RESET_TTL_MINUTES)
+        });
+        mailSent = true;
+        console.log(`[MAIL OK] Tautan pemulihan dikirim ke ${user.email}.`);
+      } catch (mailErr: any) {
+        console.error('[MAIL ERROR]', mailErr?.message || mailErr);
+      }
+    } else {
+      console.warn(`[MAIL BELUM DIKONFIGURASI] Tautan pemulihan untuk ${user.email}: ${link}`);
+    }
+
+    res.json({ success: true, message: generic, mailSent });
+  } catch (err: any) {
+    console.error('[FORGOT PASSWORD ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal memproses permintaan pemulihan.' });
+  }
+});
+
+// 2. Simpan kata sandi baru dari token pemulihan
+router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = String(req.body?.token || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!token) {
+      res.status(400).json({ success: false, message: 'Token pemulihan tidak ada.' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ success: false, message: 'Kata sandi minimal 6 karakter.' });
+      return;
+    }
+
+    const p = getPool();
+    const [rows] = await p.query<any[]>(
+      'SELECT id, user_id FROM password_resets WHERE token = ? AND used_at IS NULL AND expires_at > NOW()',
+      [token]
+    );
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, message: 'Tautan tidak valid atau sudah kedaluwarsa.' });
+      return;
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await p.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, rows[0].user_id]);
+    await p.query('UPDATE password_resets SET used_at = NOW() WHERE id = ?', [rows[0].id]);
+    console.log(`[RESET SANDI] Kata sandi ${rows[0].user_id} diperbarui lewat tautan pemulihan.`);
+
+    res.json({ success: true, message: 'Kata sandi berhasil diubah. Silakan masuk dengan kata sandi baru.' });
+  } catch (err: any) {
+    console.error('[RESET PASSWORD ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengubah kata sandi.' });
+  }
+});
+
+// 3. Sambungkan akun Gmail pengirim (sekali saja) -> simpan refresh token ke .env
+router.get('/google/connect', requireAuth, (_req: Request, res: Response): void => {
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID || '',
+    redirect_uri: `${appBaseUrl()}/api/auth/google/callback`,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/gmail.send',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true'
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+router.get('/google/callback', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const code = String(req.query.code || '');
+    if (!code) {
+      res.status(400).send('Kode otorisasi Google tidak ditemukan.');
+      return;
+    }
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID || '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        redirect_uri: `${appBaseUrl()}/api/auth/google/callback`,
+        grant_type: 'authorization_code'
+      })
+    });
+    const data: any = await tokenRes.json();
+    if (!tokenRes.ok || !data.refresh_token) {
+      console.error('[GOOGLE OAUTH ERROR]', data);
+      res.status(400).send(`Gagal menukar kode: ${data.error_description || data.error || 'refresh_token tidak diterima'}`);
+      return;
+    }
+
+    const profRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { Authorization: `Bearer ${data.access_token}` }
+    });
+    const prof: any = await profRes.json();
+    const sender = prof?.emailAddress || '';
+
+    saveEnv({
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+      GOOGLE_REFRESH_TOKEN: data.refresh_token,
+      GMAIL_SENDER: sender
+    });
+    console.log(`[GOOGLE OAUTH OK] Pengirim email: ${sender}`);
+
+    res.send(`<!doctype html><meta charset="utf-8"><body style="font-family:Segoe UI,Arial,sans-serif;padding:40px;color:#0f172a">
+      <h2>Email pengirim berhasil disambungkan</h2>
+      <p>Akun pengirim: <b>${sender || '(tidak terbaca)'}</b></p>
+      <p>Refresh token sudah tersimpan. Fitur lupa sandi kini mengirim email sungguhan.</p>
+      <p><a href="/login">Kembali ke aplikasi</a></p></body>`);
+  } catch (err: any) {
+    console.error('[GOOGLE OAUTH ERROR]', err);
+    res.status(500).send('Gagal menyambungkan akun Google.');
   }
 });
 

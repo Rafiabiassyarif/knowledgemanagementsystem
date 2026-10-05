@@ -11,6 +11,20 @@ export default defineConfig(() => {
         '@': path.resolve(import.meta.dirname, '.'),
       },
     },
+    build: {
+      // Pisahkan pustaka besar agar bundel utama lebih ringan & bisa di-cache terpisah.
+      rollupOptions: {
+        output: {
+          // Vite 8 (rolldown) memakai bentuk fungsi.
+          manualChunks(id: string) {
+            if (id.includes('node_modules/react') || id.includes('node_modules/scheduler')) return 'react';
+            if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) return 'charts';
+            if (id.includes('node_modules/lucide-react')) return 'icons';
+            if (id.includes('node_modules/motion')) return 'motion';
+          }
+        }
+      }
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.

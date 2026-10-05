@@ -1,52 +1,72 @@
-# KMS BUMD — Knowledge Management System
+# KnowBase - Knowledge Management System (KMS BUMD)
 
-Platform Knowledge Management untuk BUMD: kelola dokumen & knowledge per project (organisasi), lengkap dengan asisten AI berbasis **RAG (Retrieval-Augmented Generation)** yang menjawab dari dokumen resmi disertai rujukan sumber, plus render multi-dokumen (foto/file/dokumen) langsung di chat.
+Platform pengelolaan dokumen & basis pengetahuan multi-tenant: frontend React/Vite,
+backend Express + MySQL, penyimpanan berkas di Kroombox Edge CDN, dan pencarian
+semantik lewat server RAG.
 
-## Arsitektur
+## Arsitektur singkat
 
-| Komponen | Teknologi |
-|---|---|
-| Frontend | React + Vite + TypeScript + Tailwind (port 3000) |
-| Backend | Express + MySQL (Laragon, port 5000) |
-| Berkas fisik | Kroombox Edge CDN (MySQL hanya menyimpan metadata) |
-| Knowledge AI | Multi-Tenant RAG & Jev AI (`https://rag.aiones.app`) |
-| Auth | JWT + bcrypt, guard `requireAuth`/`requireRole` |
+| Bagian | Teknologi | Catatan |
+| --- | --- | --- |
+| Frontend | React 19 + Vite + Tailwind 4 | build ke `dist/` |
+| Backend | Express + `tsx server/index.ts` | API di `/api/*` |
+| Database | MySQL (`kms_bumd`) | tabel dibuat otomatis saat start |
+| Berkas | Kroombox Edge CDN | MySQL hanya menyimpan metadata |
+| Pencarian AI | Server RAG (`RAG_BASE_URL`) | key master + key per project |
 
-Alur utama: user membuat project → otomatis dibuatkan API key RAG khusus project → upload multi-dokumen (PDF/Word/Excel/foto/teks) tersimpan ke CDN & di-ingest ke knowledge base RAG project → pengguna bertanya lewat chat AI, jawaban grounded + lampiran CDN dirender di chat.
+## Menjalankan lokal
 
-## Menjalankan Lokal
+```bash
+npm ci
+cp .env.example .env      # lalu isi nilainya
+npm run server            # backend  (default http://localhost:5000)
+npm run dev               # frontend (http://localhost:3000)
+```
 
-**Prasyarat:** Node.js 18+, MySQL (Laragon).
+`npm run lint` menjalankan `tsc --noEmit` (type-check). Tidak ada test otomatis di repo ini.
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Salin `.env.example` menjadi `.env`, lalu isi:
-   - `DB_*` — kredensial MySQL lokal
-   - `JWT_SECRET` — secret acak yang kuat
-   - `RAG_BASE_URL` & `RAG_API_KEY` — layanan RAG (bisa diminta ke admin)
-   - `KROOMBOX_*` — kredensial Kroombox Edge CDN
-3. Jalankan backend + frontend:
-   ```bash
-   npm run server   # backend (tsx watch, port 5000)
-   npm run dev      # frontend (Vite, port 3000)
-   ```
+## Deploy produksi (ringkas)
 
-> Catatan: tidak ada `GEMINI_API_KEY` atau key AI pihak ketiga lain yang dibutuhkan — seluruh fitur AI berjalan lewat layanan RAG internal.
+```bash
+git pull --ff-only
+npm ci                    # hanya bila package.json / package-lock.json berubah
+npm run build             # menghasilkan dist/
+pm2 restart <nama-app> --update-env
+pm2 save
+```
 
-## Skrip
+Contoh konfigurasi nginx (vhost saja, TLS diterminasi reverse proxy/Cloudflare):
 
-| Perintah | Fungsi |
-|---|---|
-| `npm run dev` | Frontend Vite (dev) |
-| `npm run server` | Backend Express (tsx watch) |
-| `npm run lint` | Typecheck TypeScript (`tsc --noEmit`) |
-| `npm run build` | Build produksi frontend |
+```nginx
+server {
+  listen 80;
+  server_name kms.contoh.id;
+  root /path/ke/proyek/dist;
+  index index.html;
+  client_max_body_size 50m;
 
-## Akun Demo (development)
+  location /api/    { proxy_pass http://127.0.0.1:5000; proxy_set_header Host $host; }
+  location /uploads/{ proxy_pass http://127.0.0.1:5000; proxy_set_header Host $host; }
+  location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
+  location /        { try_files $uri $uri/ /index.html; }
+}
+```
 
-Dibuat otomatis saat seeding, password `password123`:
-- `superadmin@kms.id` — superadmin
-- `admin@kms.id` — admin organisasi demo
-- `user@kms.id` — user biasa
+## Environment penting
+
+Semua variabel ada di `.env.example`. Yang paling sering salah:
+
+- `RAG_API_KEY` - kunci operator server RAG. Bila kosong, indeks dokumen ditolak 401.
+- `KROOMBOX_*` - **wajib** diisi dengan project CDN milik sendiri; bila kosong aplikasi
+  memakai kredensial default di kode sehingga berkas project lain ikut terlihat.
+- `JWT_SECRET` dan `DEMO_PASSWORD` - wajib diganti sebelum dipublikasikan.
+- `GOOGLE_*` + `GMAIL_SENDER` - untuk email fitur lupa sandi. Setelah mengisi client
+  id/secret, buka `/api/auth/google/connect` sekali sebagai admin untuk menyimpan refresh token.
+
+## Fitur
+
+- Multi-project (organisasi) dengan isolasi knowledge base per project
+- Unggah multi-berkas (dokumen & foto) ke CDN, pratinjau, unduh langsung dari CDN
+- Indeks otomatis ke server RAG + sinkronisasi ulang manual
+- Manajemen pengguna, permintaan bergabung, log aktivitas, monitoring CDN
+- Lupa sandi: token sekali pakai (kedaluwarsa 60 menit) + email via Gmail API

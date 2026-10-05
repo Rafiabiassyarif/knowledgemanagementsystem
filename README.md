@@ -60,6 +60,9 @@ Semua variabel ada di `.env.example`. Yang paling sering salah:
 - `KROOMBOX_*` - **wajib** diisi dengan project CDN milik sendiri; bila kosong aplikasi
   memakai kredensial default di kode sehingga berkas project lain ikut terlihat.
 - `JWT_SECRET` dan `DEMO_PASSWORD` - wajib diganti sebelum dipublikasikan.
+- `CORS_ORIGINS` - daftar origin yang diizinkan (dipisah koma). Bila kosong, semua origin diterima.
+- `DEFAULT_USER_PASSWORD` - sandi awal pengguna baru dan akun yang belum punya sandi.
+- `LOGIN_MAX_ATTEMPTS` - batas percobaan login per IP+email dalam 10 menit (default 10).
 - `GOOGLE_*` + `GMAIL_SENDER` - untuk email fitur lupa sandi. Setelah mengisi client
   id/secret, buka `/api/auth/google/connect` sekali sebagai admin untuk menyimpan refresh token.
 

@@ -54,7 +54,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 // 2. Add user to organization (admin & superadmin only)
 router.post('/', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, organizationId, role = 'user' } = req.body;
+    const { name, email, organizationId, role = 'user', password, department, position } = req.body;
     if (!name || !email) {
       res.status(400).json({ success: false, message: 'Nama dan email wajib diisi.' });
       return;
@@ -72,10 +72,15 @@ router.post('/', requireRole('admin', 'superadmin'), async (req: Request, res: R
     const userId = `usr-${Date.now()}`;
     const initials = name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'US';
 
+    // Akun baru wajib punya sandi agar bisa login: pakai `password` bila dikirim,
+    // jika tidak gunakan DEFAULT_USER_PASSWORD / DEMO_PASSWORD.
+    const plainPassword = String(password || process.env.DEFAULT_USER_PASSWORD || process.env.DEMO_PASSWORD || 'password123');
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+
     await p.query(`
-      INSERT INTO users (id, name, email, role, organization_id, status, avatar_initials, org_join_status)
-      VALUES (?, ?, ?, ?, ?, 'active', ?, 'joined')
-    `, [userId, name.trim(), email.trim().toLowerCase(), role, organizationId || null, initials]);
+      INSERT INTO users (id, name, email, password_hash, role, organization_id, status, avatar_initials, org_join_status, department, position)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 'joined', ?, ?)
+    `, [userId, name.trim(), email.trim().toLowerCase(), passwordHash, role, organizationId || null, initials, department || null, position || null]);
 
     // Fetch created user with org name
     const [rows] = await p.query<any[]>(`

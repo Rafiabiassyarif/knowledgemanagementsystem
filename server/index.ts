@@ -31,8 +31,11 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Middleware
+// Whitelist origin via CORS_ORIGINS (dipisah koma). Bila kosong, seluruh origin
+// diterima seperti perilaku sebelumnya (memudahkan pengembangan lokal).
+const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 app.use(cors({
-  origin: true,
+  origin: corsOrigins.length > 0 ? corsOrigins : true,
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -54,6 +57,28 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // API Routes
+// Pembatas percobaan masuk (in-memory, tanpa dependensi tambahan).
+const LOGIN_MAX_ATTEMPTS = Number(process.env.LOGIN_MAX_ATTEMPTS || 10);
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+function loginRateLimit(req: Request, res: Response, next: NextFunction): void {
+  const key = `${req.ip}|${String((req.body as any)?.email || '').toLowerCase()}`;
+  const now = Date.now();
+  const rec = loginAttempts.get(key);
+  if (!rec || rec.resetAt < now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    next();
+    return;
+  }
+  if (rec.count >= LOGIN_MAX_ATTEMPTS) {
+    res.status(429).json({ success: false, message: 'Terlalu banyak percobaan masuk. Silakan coba lagi beberapa menit kemudian.' });
+    return;
+  }
+  rec.count += 1;
+  next();
+}
+app.use('/api/auth/login', loginRateLimit);
+
 // Public: auth endpoints (login, register, superadmin-login)
 app.use('/api/auth', authRoutes);
 

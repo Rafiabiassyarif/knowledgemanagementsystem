@@ -228,6 +228,17 @@ async function createTables() {
      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'join_requests' AND COLUMN_NAME = 'organization_code'`,
     [DB_NAME]
   );
+  // Pengguna tanpa sandi (mis. akun hasil seed/undangan) diberi sandi default agar bisa login.
+  const [noPass] = await p.query<any[]>(
+    `SELECT COUNT(*) as cnt FROM users WHERE password_hash IS NULL OR password_hash = ''`
+  );
+  if (noPass[0].cnt > 0) {
+    const defaultPassword = process.env.DEFAULT_USER_PASSWORD || process.env.DEMO_PASSWORD || 'password123';
+    const defaultHash = await bcrypt.hash(defaultPassword, 10);
+    await p.query(`UPDATE users SET password_hash = ? WHERE password_hash IS NULL OR password_hash = ''`, [defaultHash]);
+    console.log(`[DB] ${noPass[0].cnt} pengguna tanpa sandi diberi sandi default.`);
+  }
+
   if (jrCols[0].cnt === 0) {
     await p.query(`ALTER TABLE join_requests 
       ADD COLUMN organization_code VARCHAR(64) NULL AFTER organization_id,

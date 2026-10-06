@@ -180,9 +180,12 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     setProcessState('uploading');
     setUploadedCount(0);
     setProgressPercent(5);
-    setUploadError('');
-
-    const targetOrgId = defaultOrgId || currentOrganization?.id || currentUser?.organizationId || (organizations && organizations[0]?.id) || undefined;
+    const targetOrgId = defaultOrgId || currentOrganization?.id;
+    if (!targetOrgId) {
+      setUploadError('Pilih atau buat project terlebih dahulu sebelum mengunggah berkas.');
+      setProcessState('error');
+      return;
+    }
     let completed = 0;
     let lastErrorMessage = '';
 

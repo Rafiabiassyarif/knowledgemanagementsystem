@@ -42,8 +42,8 @@ export const DashboardPage: React.FC = () => {
     currentOrganization,
     organizations = [],
     users = [],
-    documents = [],
-    chunks = [],
+    accessibleDocuments = [],
+    accessibleChunks = [],
     activityLogs = [],
     setSelectedDocForViewer
   } = useApp();
@@ -72,22 +72,24 @@ export const DashboardPage: React.FC = () => {
     docs: org.documentsCount || 0
   }));
 
-  // Calculations for Platform Overview
+  // Calculations for Platform Overview (Strictly for active project)
   const totalProjects = (organizations || []).length;
-  const totalDocsCount = (documents || []).length;
-  const countPhoto = (documents || []).filter(d => 
+  const totalDocsCount = (accessibleDocuments || []).length;
+  const countPhoto = (accessibleDocuments || []).filter(d => 
     (d.repositoryType || '').toLowerCase() === 'photo' || 
     ['png', 'jpg', 'jpeg', 'webp', 'image'].includes((d.fileType || '').toLowerCase())
   ).length;
   const countDocsOnly = totalDocsCount - countPhoto;
-  const totalChunksCount = (chunks || []).length || (organizations || []).reduce((acc, o) => acc + (o.chunksCount || 0), 0);
-  const totalStorageMb = Math.round((documents || []).reduce((acc, d) => acc + (d.fileSizeKb || 0), 0) / 1024 * 10) / 10 || Math.round(totalDocsCount * 4.2);
+  const totalChunksCount = (accessibleChunks || []).length || (currentOrganization?.chunksCount || 0);
+  const totalStorageMb = Math.round((accessibleDocuments || []).reduce((acc, d) => acc + (d.fileSizeKb || 0), 0) / 1024 * 10) / 10 || Math.round(totalDocsCount * 4.2);
 
   // Filter logs for this view
-  const displayLogs = (activityLogs || []).slice(0, 6);
+  const displayLogs = (activityLogs || [])
+    .filter(l => !currentOrganization || !l.organizationId || l.organizationId === currentOrganization.id)
+    .slice(0, 6);
 
-  // Filter documents for this view
-  const displayDocs = (documents || []).slice(0, 6);
+  // Filter documents for this view (Strictly active project's documents)
+  const displayDocs = (accessibleDocuments || []).slice(0, 6);
 
   const PROJECT_PALETTE = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'];
 

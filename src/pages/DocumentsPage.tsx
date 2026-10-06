@@ -637,9 +637,13 @@ export const DocumentsPage: React.FC = () => {
             <FileText className="w-7 h-7" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Tidak ada berkas yang sesuai</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {currentOrganization ? `Proyek ${currentOrganization.name} Masih Kosong` : 'Tidak Ada Dokumen'}
+            </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
-              Belum ada berkas yang diunggah ke proyek ini atau tidak ada berkas yang cocok dengan filter pencarian Anda.
+              {currentOrganization 
+                ? `Belum ada berkas yang diunggah ke proyek "${currentOrganization.name}". Seluruh dokumen dan aset terisolasi rapi per-project.`
+                : 'Belum ada berkas yang diunggah ke sistem atau cocok dengan filter pencarian.'}
             </p>
           </div>
           <div className="pt-2">
@@ -649,7 +653,9 @@ export const DocumentsPage: React.FC = () => {
               className="group inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
               <UploadCloud className="w-4 h-4 text-white shrink-0 group-hover:-translate-y-0.5 transition-transform duration-200" />
-              <span className="tracking-tight font-semibold">Unggah Multi-Berkas Sekarang</span>
+              <span className="tracking-tight font-semibold">
+                Unggah Berkas ke {currentOrganization?.name || 'Proyek'}
+              </span>
             </button>
           </div>
         </div>

@@ -7,11 +7,13 @@ import { deleteFromKroomboxCDN } from '../services/cdn';
 
 const router = Router();
 
-// 1. Get all organizations with calculated stats
-router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void> => {
+// 1. Get all organizations with calculated stats (filtered per user unless superadmin)
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const p = getPool();
-    const [rows] = await p.query<any[]>(`
+    const user = req.authUser;
+
+    let query = `
       SELECT 
         o.*,
         COALESCE(
@@ -21,8 +23,26 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
         (SELECT COUNT(*) FROM documents d WHERE d.organization_id = o.id) as documentsCount,
         (SELECT COUNT(*) FROM users u WHERE u.organization_id = o.id) as usersCount
       FROM organizations o
-      ORDER BY o.created_at DESC
-    `);
+    `;
+    const params: any[] = [];
+
+    // User isolation:
+    // Superadmin dapat melihat SEMUA project untuk keperluan pengawasan sistem.
+    // User biasa & Admin HANYA melihat project milik mereka sendiri (yang mereka buat atau tempat mereka bergabung).
+    if (user && user.role !== 'superadmin') {
+      query += `
+        WHERE (
+          o.created_by = ? 
+          OR o.id = (SELECT organization_id FROM users WHERE id = ?) 
+          OR (o.created_by IS NULL AND o.admin_name = ?)
+        )
+      `;
+      params.push(user.id, user.id, user.name);
+    }
+
+    query += ' ORDER BY o.created_at DESC';
+
+    const [rows] = await p.query<any[]>(query, params);
 
     const orgs = rows.map(r => ({
       id: r.id,
@@ -40,6 +60,7 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
       description: r.description,
       adminName: r.admin_name,
       adminEmail: r.adminEmail || r.email || null,
+      createdBy: r.created_by || null,
       status: r.status,
       documentsCount: Number(r.documentsCount) || 0,
       usersCount: Number(r.usersCount) || 0,
@@ -60,6 +81,7 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
 router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const user = req.authUser;
     const p = getPool();
 
     const [rows] = await p.query<any[]>(`
@@ -81,6 +103,16 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
     }
 
     const r = rows[0];
+
+    // Access check: User/Admin can only access their own project
+    if (user && user.role !== 'superadmin') {
+      const isOwnerOrMember = (r.created_by === user.id) || (r.admin_name === user.name) || (user.organizationId === r.id);
+      if (!isOwnerOrMember) {
+        res.status(403).json({ success: false, message: 'Anda tidak memiliki hak akses ke proyek ini.' });
+        return;
+      }
+    }
+
     const org = {
       id: r.id,
       name: r.name,
@@ -97,6 +129,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
       description: r.description,
       adminName: r.admin_name,
       adminEmail: r.adminEmail || r.email || null,
+      createdBy: r.created_by || null,
       status: r.status,
       documentsCount: Number(r.documentsCount) || 0,
       usersCount: Number(r.usersCount) || 0,
@@ -170,9 +203,14 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     const orgId = (req.body.id && typeof req.body.id === 'string' && req.body.id.startsWith('org-'))
       ? req.body.id
       : `org-${Date.now()}`;
+    
+    const effectiveCreatorId = req.authUser?.id || creatorId || null;
+    const effectiveAdminName = adminName || req.authUser?.name || 'Owner Project';
+    const effectiveEmail = email || req.authUser?.email || null;
+
     await p.query(`
-      INSERT INTO organizations (id, name, code, knowledge_base, type, sector, province, city, address, phone, email, website, description, admin_name, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+      INSERT INTO organizations (id, name, code, knowledge_base, type, sector, province, city, address, phone, email, website, description, admin_name, created_by, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
     `, [
       orgId,
       name.trim(),
@@ -184,15 +222,16 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       city || null,
       address || null,
       phone || null,
-      email || null,
+      effectiveEmail,
       website || null,
       description || null,
-      adminName || null
+      effectiveAdminName,
+      effectiveCreatorId
     ]);
 
-    // Link creator to this organization if creator is admin
-    if (creatorId) {
-      await p.query('UPDATE users SET organization_id = ? WHERE id = ?', [orgId, creatorId]);
+    // Link creator to this organization
+    if (effectiveCreatorId) {
+      await p.query('UPDATE users SET organization_id = ? WHERE id = ?', [orgId, effectiveCreatorId]);
     }
 
     // Provision API key RAG khusus project ini (best-effort, non-blocking).
@@ -209,8 +248,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       `act-${Date.now()}`,
       orgId,
       name,
-      adminName || 'Admin',
-      creatorRole || 'admin',
+      effectiveAdminName,
+      creatorRole || req.authUser?.role || 'user',
       name
     ]);
 
@@ -225,10 +264,11 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       city,
       address,
       phone,
-      email,
+      email: effectiveEmail,
       website,
       description,
-      adminName,
+      adminName: effectiveAdminName,
+      createdBy: effectiveCreatorId,
       status: 'active',
       documentsCount: 0,
       usersCount: 1,
@@ -249,14 +289,35 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const user = req.authUser;
     const { name, code, type, sector, province, city, address, phone, email, adminEmail, website, description, adminName } = req.body;
     const targetEmail = adminEmail || email;
 
     const p = getPool();
+
+    // Verify ownership
+    const [existing] = await p.query<any[]>('SELECT id, created_by, admin_name FROM organizations WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, message: 'Proyek tidak ditemukan.' });
+      return;
+    }
+
+    if (user && user.role !== 'superadmin') {
+      const isOwner = (existing[0].created_by === user.id) || (existing[0].admin_name === user.name) || (user.organizationId === id) || (user.role === 'admin');
+      if (!isOwner) {
+        res.status(403).json({ success: false, message: 'Anda tidak memiliki hak untuk mengubah proyek ini.' });
+        return;
+      }
+    }
+
+    const { knowledgeBase, knowledge_base } = req.body;
+    const finalKb = knowledgeBase || knowledge_base || null;
+
     await p.query(`
       UPDATE organizations 
       SET name = COALESCE(?, name),
           code = COALESCE(?, code),
+          knowledge_base = COALESCE(?, knowledge_base),
           type = COALESCE(?, type),
           sector = COALESCE(?, sector),
           province = COALESCE(?, province),
@@ -268,13 +329,13 @@ router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
           description = COALESCE(?, description),
           admin_name = COALESCE(?, admin_name)
       WHERE id = ?
-    `, [name, code, type, sector, province, city, address, phone, targetEmail, website, description, adminName, id]);
+    `, [name, code, finalKb, type, sector, province, city, address, phone, targetEmail, website, description, adminName, id]);
 
     if (adminName || targetEmail) {
       await p.query(`
         UPDATE users 
         SET name = COALESCE(?, name),
-            email = COALESCE(?, email)
+             email = COALESCE(?, email)
         WHERE organization_id = ? AND role = 'admin'
       `, [adminName, targetEmail, id]);
     }
@@ -290,12 +351,22 @@ router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
 router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const user = req.authUser;
     const p = getPool();
 
-    const [rows] = await p.query<any[]>('SELECT name, knowledge_base FROM organizations WHERE id = ?', [id]);
+    const [rows] = await p.query<any[]>('SELECT name, knowledge_base, created_by, admin_name FROM organizations WHERE id = ?', [id]);
     if (rows.length === 0) {
       res.status(404).json({ success: false, message: 'Proyek tidak ditemukan.' });
       return;
+    }
+
+    // Verify ownership: superadmin, project creator, admin, or project member
+    if (user && user.role !== 'superadmin') {
+      const isOwner = (rows[0].created_by === user.id) || (rows[0].admin_name === user.name) || (user.organizationId === id) || (user.role === 'admin');
+      if (!isOwner) {
+        res.status(403).json({ success: false, message: 'Anda tidak memiliki wewenang untuk menghapus proyek ini.' });
+        return;
+      }
     }
 
     const orgName = rows[0].name;

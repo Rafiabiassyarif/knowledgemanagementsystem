@@ -24,6 +24,8 @@ export interface Organization {
   adminId: string | null;
   adminName: string | null;
   adminEmail: string | null;
+  createdBy?: string | null;
+  created_by?: string | null;
   documentsCount: number;
   usersCount: number;
   chunksCount: number;

@@ -60,6 +60,14 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       params.push(req.authUser.id);
     }
 
+    // Project Isolation:
+    // Superadmin dapat memantau seluruh dokumen.
+    // User & Admin hanya melihat dokumen dalam project milik mereka sendiri.
+    if (req.authUser && req.authUser.role !== 'superadmin') {
+      conditions.push('(o.created_by = ? OR o.id = (SELECT organization_id FROM users WHERE id = ?) OR (o.created_by IS NULL AND o.admin_name = ?))');
+      params.push(req.authUser.id, req.authUser.id, req.authUser.name);
+    }
+
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
@@ -298,30 +306,28 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       }
     }
 
-    // 6. Fallback to latest active project in database
+    // 6. Fallback to latest active project owned by or assigned to this user
     if (orgRows.length === 0) {
-      const [latestOrg] = await p.query<any[]>('SELECT id, name, code, knowledge_base FROM organizations ORDER BY created_at DESC LIMIT 1');
-      if (latestOrg.length > 0) {
-        orgRows = latestOrg;
-        targetOrgId = latestOrg[0].id;
+      const effectiveUserId = (req as any).authUser?.id || uploadedById;
+      if (effectiveUserId) {
+        const [userProjects] = await p.query<any[]>(
+          'SELECT id, name, code, knowledge_base FROM organizations WHERE created_by = ? ORDER BY created_at DESC LIMIT 1',
+          [effectiveUserId]
+        );
+        if (userProjects.length > 0) {
+          orgRows = userProjects;
+          targetOrgId = userProjects[0].id;
+        }
       }
     }
 
-    // 7. If database has NO projects at all, auto-create default project so uploads are NEVER blocked
+    // 7. If user has no project, reject upload so documents never get stored in someone else's project
     if (orgRows.length === 0) {
-      const defaultOrgId = 'org-utama';
-      await p.query(`
-        INSERT INTO organizations (id, name, code, knowledge_base, type, status)
-        VALUES (?, 'Proyek Utama', 'PRJ-UTAMA', 'kb_utama', 'Teknologi & Digital', 'active')
-      `, [defaultOrgId]);
-      const [createdOrg] = await p.query<any[]>('SELECT id, name, code, knowledge_base FROM organizations WHERE id = ?', [defaultOrgId]);
-      if (createdOrg.length > 0) {
-        orgRows = createdOrg;
-        targetOrgId = createdOrg[0].id;
-      } else {
-        res.status(404).json({ success: false, message: 'Proyek tujuan tidak ditemukan. Silakan pilih atau buat Proyek terlebih dahulu.' });
-        return;
-      }
+      res.status(400).json({ 
+        success: false, 
+        message: 'Anda belum memiliki project. Silakan buat project terlebih dahulu di menu Manajemen Project sebelum mengunggah dokumen.' 
+      });
+      return;
     }
 
     const orgName = orgRows[0].name;

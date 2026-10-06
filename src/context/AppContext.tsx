@@ -132,9 +132,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
     const saved = localStorage.getItem('kms_orgs_store');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) { }
     }
-    return initialOrganizations;
+    return [];
   });
   // Dokumen: di-cache di localStorage agar daftar tetap tampil saat refresh
   // (berkas fisik di CDN, metadata/URL di MySQL — cache ini hanya buffer UI)
@@ -241,10 +244,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           api.activities.getAll()
         ]);
 
-        // IMPORTANT: only replace local state when backend actually has data,
-        // so a failed/empty backend response never wipes seeded or locally-added content.
-        if (orgRes.status === 'fulfilled' && orgRes.value.success && orgRes.value.organizations.length > 0) {
-          setOrganizations(orgRes.value.organizations);
+        // Set organizations strictly to what backend returned for this authenticated user.
+        // If the user has 0 projects, set organizations to [] so other users' projects never show.
+        if (orgRes.status === 'fulfilled' && orgRes.value.success) {
+          const freshOrgs = orgRes.value.organizations || [];
+          setOrganizations(freshOrgs);
+          localStorage.setItem('kms_orgs_store', JSON.stringify(freshOrgs));
+          setActiveProjectId(prev => {
+            if (prev && freshOrgs.some((o: any) => o.id === prev)) return prev;
+            return freshOrgs.length > 0 ? freshOrgs[0].id : null;
+          });
         }
         if (usersRes.status === 'fulfilled' && usersRes.value.success && usersRes.value.users.length > 0) {
           const orgList = (orgRes.status === 'fulfilled' && orgRes.value.success) ? orgRes.value.organizations : organizations;
@@ -329,22 +338,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Accessible documents based on role & active project
+  // Accessible documents strictly based on active project & role
   const accessibleDocuments = useMemo(() => {
     if (!currentUser) return [];
-    // Proyek aktif bisa kosong (akun tanpa organization_id) atau sudah tidak ada lagi
-    // (proyeknya dihapus). Fallback ke proyek pertama yang tersedia supaya daftar tidak kosong.
-    let targetId = activeProjectId || currentUser.organizationId;
-    if (organizations.length > 0 && (!targetId || !organizations.some(o => o.id === targetId))) {
-      targetId = organizations[0].id;
-    }
-    if (!targetId) return [];
-    let base = documents.filter(doc => !doc.organizationId || doc.organizationId === targetId);
+    if (!currentOrganization) return [];
+    const targetId = currentOrganization.id;
+
+    // STRICT ISOLATION: A document must strictly belong to the currently active project
+    let base = documents.filter(doc => doc.organizationId && doc.organizationId.trim() === targetId.trim());
+
+    // Superadmin in global view (without active project) can see all documents
     if (currentUser.role === 'superadmin' && !activeProjectId) {
       base = documents;
     }
 
-    // Role-based visibility:
+    // Role-based visibility within the project:
     // User biasa TIDAK BISA melihat dokumen yang di-upload oleh Admin.
     // User biasa hanya melihat dokumen unggahan user atau unggahan miliknya sendiri.
     // Admin & Superadmin dapat melihat SEMUA dokumen (baik unggahan admin maupun user).
@@ -353,23 +361,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     return base;
-  }, [currentUser, activeProjectId, documents, organizations]);
+  }, [currentUser, activeProjectId, currentOrganization, documents]);
 
-  // Accessible chunks based on role & active project
+  // Accessible chunks strictly based on active project & role
   const accessibleChunks = useMemo(() => {
     if (!currentUser) return [];
-    // Proyek aktif bisa kosong (akun tanpa organization_id) atau sudah tidak ada lagi
-    // (proyeknya dihapus). Fallback ke proyek pertama yang tersedia supaya daftar tidak kosong.
-    let targetId = activeProjectId || currentUser.organizationId;
-    if (organizations.length > 0 && (!targetId || !organizations.some(o => o.id === targetId))) {
-      targetId = organizations[0].id;
-    }
-    if (!targetId) return [];
+    if (!currentOrganization) return [];
+    const targetId = currentOrganization.id;
+
     if (currentUser.role === 'superadmin' && !activeProjectId) {
       return chunks;
     }
-    return chunks.filter(c => c.organizationId === targetId);
-  }, [currentUser, activeProjectId, chunks, organizations]);
+    return chunks.filter(c => c.organizationId && c.organizationId.trim() === targetId.trim());
+  }, [currentUser, activeProjectId, currentOrganization, chunks]);
 
   // General login for all roles (Superadmin, Admin, User)
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {
@@ -520,11 +524,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Logout
+  // Logout - completely clean session and cached stores
   const logout = () => {
     setCurrentUser(null);
     tokenStore.clear();
     localStorage.removeItem('kms_current_user');
+    localStorage.removeItem('kms_active_project_id');
+    localStorage.removeItem('kms_orgs_store');
+    localStorage.removeItem('kms_documents_store');
+    localStorage.removeItem('kms_logs_store');
+    setOrganizations([]);
+    setDocuments([]);
+    setActivityLogs([]);
+    setActiveProjectId(null);
   };
 
   // Direct community-style join (no code required, 1-click)
@@ -653,6 +665,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...newOrgData,
       id: newId,
       knowledgeBase: finalKb,
+      createdBy: currentUser?.id,
       documentsCount: 0,
       usersCount: 1,
       chunksCount: 0,
@@ -750,19 +763,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 3. Clear current user's org reference if they belonged to it, KEEPING their role intact
     if (currentUser?.organizationId === orgId) {
+      const remainingOrgs = organizations.filter(o => o.id !== orgId);
+      const nextOrg = remainingOrgs.length > 0 ? remainingOrgs[0] : null;
       const updatedUser: User = {
         ...currentUser,
-        organizationId: null,
-        organizationName: null,
-        orgJoinStatus: 'none'
+        organizationId: nextOrg ? nextOrg.id : null,
+        organizationName: nextOrg ? nextOrg.name : null,
+        orgJoinStatus: nextOrg ? 'joined' : 'none'
       };
       setCurrentUser(updatedUser);
       localStorage.setItem('kms_current_user', JSON.stringify(updatedUser));
     }
 
+    // Reset activeProjectId if the deleted org was active
+    if (activeProjectId === orgId) {
+      const remainingOrgs = organizations.filter(o => o.id !== orgId);
+      const nextId = remainingOrgs.length > 0 ? remainingOrgs[0].id : null;
+      setActiveProjectId(nextId);
+      if (nextId) {
+        localStorage.setItem('kms_active_project_id', nextId);
+      } else {
+        localStorage.removeItem('kms_active_project_id');
+      }
+    }
+
     // 4. Remove documents and chunks tied to this org
     setDocuments(prev => prev.filter(d => d.organizationId !== orgId));
     setChunks(prev => prev.filter(c => c.organizationId !== orgId));
+
+    // Refresh backend data
+    setTimeout(() => {
+      refreshBackendData();
+    }, 600);
 
     // 5. Audit log
     const newLog: ActivityLog = {
@@ -771,7 +803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       organizationName: null,
       actorName: currentUser ? currentUser.name : 'Admin',
       actorRole: currentUser ? currentUser.role : 'admin',
-      action: 'Menghapus Organisasi (Reset Kuota 1 Organisasi)',
+      action: 'Menghapus Organisasi / Project',
       target: targetOrg.name,
       timestamp: 'Baru saja',
       type: 'organization'
@@ -780,14 +812,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: true,
-      message: `Organisasi ${targetOrg.name} berhasil dihapus. Kuota organisasi telah direset, Anda kini dapat membuat 1 organisasi baru.`
+      message: `Project ${targetOrg.name} berhasil dihapus.`
     };
   };
 
   // Update Organization
   const updateOrganization = (id: string, updates: Partial<Organization>) => {
     setOrganizations(prev => prev.map(org => org.id === id ? { ...org, ...updates } : org));
-    api.organizations.update(id, updates).catch(e => console.error('[BACKEND UPDATE ORG ERROR]', e));
+    if (currentUser && (activeProjectId === id || currentUser.organizationId === id) && updates.name) {
+      setCurrentUser(prev => prev ? { ...prev, organizationName: updates.name || prev.organizationName } : null);
+    }
+    api.organizations.update(id, updates)
+      .then(() => {
+        refreshBackendData();
+      })
+      .catch(e => console.error('[BACKEND UPDATE ORG ERROR]', e));
   };
 
   // Toggle Organization Status
@@ -814,8 +853,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     summary: string;
     organizationId?: string;
   }, file?: File): Promise<DocumentItem> => {
-    const targetOrgId = docData.organizationId || activeProjectId || currentUser?.organizationId || (organizations[0]?.id || 'org-project');
-    const targetOrg = organizations.find(o => o.id === targetOrgId) || organizations[0];
+    const targetOrgId = docData.organizationId || currentOrganization?.id || activeProjectId;
+    const targetOrg = organizations.find(o => o.id === targetOrgId) || currentOrganization;
+    if (!targetOrg) {
+      throw new Error('Proyek tujuan tidak valid atau belum dipilih.');
+    }
     const newDocId = `doc-${Date.now()}`;
 
     const generatedChunksCount = Math.floor(Math.random() * 4) + 4;

@@ -215,9 +215,34 @@ export const OrganizationsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Desktop Table View (Hidden on mobile) */}
-      <div className="hidden md:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      {/* Empty State when user has no projects */}
+      {organizations.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 sm:p-12 text-center shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-4 shadow-inner">
+            <FolderKanban className="w-8 h-8" />
+          </div>
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+            Belum Ada Project Milik Anda
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1.5 leading-relaxed">
+            Setiap akun memiliki ruang lingkup project terpisah. Berkas dokumen, galeri media, dan memori AI RAG Anda sepenuhnya terisolasi dan tidak akan terlihat oleh pengguna lain.
+          </p>
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.98] cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Project Pertama Anda</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Desktop Table View (Hidden on mobile) */}
+          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[1050px]">
           <thead>
             <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/80 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <th className="py-3 px-4">Project</th>
@@ -227,17 +252,15 @@ export const OrganizationsPage: React.FC = () => {
               <th className="py-3 px-4 text-right">Dokumen & Berkas</th>
               <th className="py-3 px-4 text-center">Status</th>
               <th className="py-3 px-4 text-right">Dibuat</th>
-              <th className="py-3 px-4 text-center">
-                {isAdmin ? (
-                  <span className="inline-flex items-center gap-1 text-blue-700 dark:text-blue-300">
-                    <span>Aksi</span>
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-blue-100 dark:bg-blue-950 font-bold border border-blue-200 dark:border-blue-800">
+              <th className="py-3 px-4 text-center sticky right-0 bg-slate-50 dark:bg-slate-800 backdrop-blur-md z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] min-w-[180px]">
+                <div className="flex items-center justify-center gap-1">
+                  <span>Aksi & Manajemen</span>
+                  {isAdmin && (
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-blue-100 dark:bg-blue-950 font-bold border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
                       ADMIN
                     </span>
-                  </span>
-                ) : (
-                  <span>Aksi</span>
-                )}
+                  )}
+                </div>
               </th>
             </tr>
           </thead>
@@ -357,45 +380,53 @@ export const OrganizationsPage: React.FC = () => {
                   {typeof org.createdAt === 'string' ? org.createdAt.split('T')[0] : 'Hari ini'}
                 </td>
 
-                {/* Actions: KEDUA ROLE BISA EDIT & HAPUS, ADMIN MEMILIKI TOMBOL POWER/STATUS KHUSUS */}
-                <td className="py-3.5 px-4 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    {/* Switch Project */}
-                    {currentOrganization?.id !== org.id ? (
+                {/* Actions: Sticky Right Column for Full CRUD Accessibility */}
+                <td className="py-3.5 px-4 text-center sticky right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]">
+                  <div className="flex items-center justify-center gap-1">
+                    {/* 1. Switch / Jadikan Project Aktif */}
+                    {currentOrganization?.id === org.id ? (
+                      <span 
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[10px] font-bold"
+                        title="Project Aktif Saat Ini"
+                      >
+                        <Check className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                        <span>Aktif</span>
+                      </span>
+                    ) : (
                       <button
+                        type="button"
                         onClick={() => switchProject(org.id)}
-                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/60 text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 text-[10px] font-semibold transition-colors cursor-pointer border border-transparent hover:border-blue-200 dark:hover:border-blue-800"
                         title="Pilih dan Jadikan Project Aktif"
                       >
-                        <CheckCircle2 className="w-4 h-4" />
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Pilih</span>
                       </button>
-                    ) : (
-                      <span className="p-1.5 text-blue-600 dark:text-blue-400" title="Project Aktif Saat Ini">
-                        <Check className="w-4 h-4" />
-                      </span>
                     )}
 
-                    {/* 1. Lihat Detail Project (User & Admin) */}
+                    {/* 2. Lihat Detail Project */}
                     <Link
                       to={`/app/projects/${org.id}`}
-                      className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
-                      title="Lihat Detail Project"
+                      className="p-1.5 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                      title="Lihat Detail & Repositori Project"
                     >
                       <Eye className="w-4 h-4" />
                     </Link>
 
-                    {/* 2. Edit Project */}
+                    {/* 3. Edit Data Project (CRUD - Update) */}
                     <button
+                      type="button"
                       onClick={() => setEditingOrg(org)}
-                      className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
-                      title="Edit Data Project"
+                      className="p-1.5 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                      title="Edit Data Project (Nama, Kode, Sektor, RAG)"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
 
-                    {/* 3. Nonaktifkan / Aktifkan Status (KHUSUS ADMIN) */}
+                    {/* 4. Nonaktifkan / Aktifkan Status (Khusus Admin) */}
                     {isAdmin && (
                       <button
+                        type="button"
                         onClick={() => toggleOrgStatus(org.id)}
                         className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                           org.status === 'active'
@@ -408,11 +439,12 @@ export const OrganizationsPage: React.FC = () => {
                       </button>
                     )}
 
-                    {/* 4. Hapus Project */}
+                    {/* 5. Hapus Project (CRUD - Delete) */}
                     <button
+                      type="button"
                       onClick={() => setDeletingOrg(org)}
-                      className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                      title="Hapus Project"
+                      className="p-1.5 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                      title="Hapus Project & Dokumen"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -533,6 +565,8 @@ export const OrganizationsPage: React.FC = () => {
           </div>
         )}
       </div>
+    </>
+  )}
 
       {/* Delete Org Confirmation Modal with Role-Aware Context */}
       {deletingOrg && (
@@ -553,15 +587,15 @@ export const OrganizationsPage: React.FC = () => {
                 </span>
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Hapus Organisasi {deletingOrg.name}?
+                Hapus Project {deletingOrg.name}?
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 {isAdmin
-                  ? 'Sebagai Administrator, tindakan ini akan menghapus entitas BUMD beserta seluruh berkas repositori dokumen terkait dari sistem secara permanen.'
-                  : 'Tindakan ini akan menghapus organisasi ini beserta seluruh dokumen yang tersimpan di dalamnya.'}
+                  ? 'Sebagai Administrator, tindakan ini akan menghapus project beserta seluruh berkas repositori dokumen dan partisi memori RAG terkait secara permanen.'
+                  : 'Tindakan ini akan menghapus project ini beserta seluruh berkas repositori dokumen yang tersimpan di dalamnya.'}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Admin organisasi ini ({deletingOrg.adminName || 'Admin'}) dapat membuat atau bergabung kembali ke organisasi baru.
+                Pemilik project ini ({deletingOrg.adminName || 'User'}) dapat membuat atau memilih project lain kapan saja.
               </p>
             </div>
 
@@ -582,7 +616,7 @@ export const OrganizationsPage: React.FC = () => {
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>{isAdmin ? 'Ya, Hapus Sebagai Admin' : 'Ya, Hapus Organisasi'}</span>
+                <span>{isAdmin ? 'Ya, Hapus Sebagai Admin' : 'Ya, Hapus Project'}</span>
               </button>
             </div>
           </div>

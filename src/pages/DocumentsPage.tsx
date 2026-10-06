@@ -102,9 +102,21 @@ export const DocumentsPage: React.FC = () => {
       .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
   };
 
+  const resolveDocumentImageUrl = (doc: any) => {
+    if (!doc) return '';
+    if (doc.cdnFileId) {
+      return `https://api-cdn.kroombox.com/api/bridge/view/${doc.cdnFileId}`;
+    }
+    if (doc.fileUrl && !doc.fileUrl.startsWith('db://') && !doc.fileUrl.includes('drive.google.com')) {
+      return doc.fileUrl;
+    }
+    return `/api/documents/${doc.id}/view`;
+  };
+
   const isPhotoFile = (doc: any) => {
-    return doc.repositoryType === 'photo' || 
-      ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'image'].includes((doc.fileType || '').toLowerCase());
+    return (doc.repositoryType || '').toLowerCase() === 'photo' || 
+      ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'image'].includes((doc.fileType || '').toLowerCase()) ||
+      /\.(png|jpe?g|webp|gif|svg|bmp)$/i.test(doc.fileName || doc.title || '');
   };
 
   return (
@@ -396,14 +408,20 @@ export const DocumentsPage: React.FC = () => {
                         className="cursor-pointer group flex items-start gap-3"
                       >
                         {isPhoto ? (
-                          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group-hover:scale-105 transition-transform">
-                            {doc.fileUrl && !doc.fileUrl.startsWith('db://') ? (
-                              <img src={doc.fileUrl} alt={doc.title} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60">
-                                <ImageIcon className="w-4 h-4" />
-                              </div>
-                            )}
+                          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group-hover:scale-105 transition-transform flex items-center justify-center">
+                            <img 
+                              src={resolveDocumentImageUrl(doc)} 
+                              alt={doc.title} 
+                              className="w-full h-full object-cover" 
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
+                                  target.src = `/api/documents/${doc.id}/view`;
+                                } else {
+                                  target.style.display = 'none';
+                                }
+                              }}
+                            />
                           </div>
                         ) : (
                           <span className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 border group-hover:scale-105 transition-transform ${
@@ -531,12 +549,24 @@ export const DocumentsPage: React.FC = () => {
               className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs hover:border-blue-400 dark:hover:border-blue-500 transition-all flex flex-col justify-between group"
             >
               {/* Photo Cover Preview if photo */}
-              {isPhoto && doc.fileUrl && !doc.fileUrl.startsWith('db://') && (
+              {isPhoto && (
                 <div 
                   onClick={() => setSelectedDocForViewer(doc)}
-                  className="w-full h-36 bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer relative"
+                  className="w-full h-36 bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer relative flex items-center justify-center"
                 >
-                  <img src={doc.fileUrl} alt={doc.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <img 
+                    src={resolveDocumentImageUrl(doc)} 
+                    alt={doc.title} 
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
+                        target.src = `/api/documents/${doc.id}/view`;
+                      } else {
+                        target.style.display = 'none';
+                      }
+                    }}
+                  />
                   <div className="absolute top-2 right-2">
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-sm">
                       Foto

@@ -76,30 +76,44 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 
     const [rows] = await p.query<any[]>(query, params);
 
-    const documents = rows.map(r => ({
-      id: r.id,
-      organizationId: r.organization_id,
-      organizationName: r.organization_name,
-      title: r.title,
-      category: r.category,
-      repositoryType: r.repository_type || 'document',
-      fileType: r.file_type,
-      fileSizeKb: r.file_size_kb,
-      fileUrl: (r.file_url && !r.file_url.startsWith('db://')) ? r.file_url : (r.cdn_file_id ? `https://api-cdn.kroombox.com/api/bridge/view/${r.cdn_file_id}` : `/api/documents/${r.id}/download`),
-      cdnFileId: r.cdn_file_id || null,
-      year: r.year,
-      department: r.department || 'Umum',
-      summary: r.summary || 'Dokumen resmi terindeks otomatis di CDN.',
-      tags: typeof r.tags === 'string' ? JSON.parse(r.tags) : (r.tags || []),
-      notes: r.notes,
-      uploadedBy: r.uploaded_by,
-      uploadedById: r.uploaded_by_id,
-      uploaderRole: r.uploader_role || 'user',
-      uploadedAt: r.created_at,
-      chunksCount: Math.max(3, Math.round(r.file_size_kb / 400)),
-      totalTokens: Math.max(500, Math.round(r.file_size_kb * 1.8)),
-      ragStatus: 'indexed'
-    }));
+    const documents = rows.map(r => {
+      const ext = (r.file_type || path.extname(r.file_name || r.file_url || '').replace('.', '') || '').toLowerCase();
+      const isImage = (r.repository_type === 'photo') || 
+        ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(ext);
+
+      // Prioritaskan cdn_file_id untuk URL render langsung CDN Kroombox.
+      // Jangan gunakan tautan Google Drive (drive.google.com) karena diblokir oleh browser saat di-render di img / iframe.
+      const resolvedFileUrl = r.cdn_file_id
+        ? cdnViewUrl(r.cdn_file_id)
+        : (r.file_url && !r.file_url.startsWith('db://') && !r.file_url.includes('drive.google.com'))
+          ? r.file_url
+          : `/api/documents/${r.id}/view`;
+
+      return {
+        id: r.id,
+        organizationId: r.organization_id,
+        organizationName: r.organization_name,
+        title: r.title,
+        category: r.category,
+        repositoryType: isImage ? 'photo' : (r.repository_type || 'document'),
+        fileType: r.file_type,
+        fileSizeKb: r.file_size_kb,
+        fileUrl: resolvedFileUrl,
+        cdnFileId: r.cdn_file_id || null,
+        year: r.year,
+        department: r.department || 'Umum',
+        summary: r.summary || 'Dokumen resmi terindeks otomatis di CDN.',
+        tags: typeof r.tags === 'string' ? JSON.parse(r.tags) : (r.tags || []),
+        notes: r.notes,
+        uploadedBy: r.uploaded_by,
+        uploadedById: r.uploaded_by_id,
+        uploaderRole: r.uploader_role || 'user',
+        uploadedAt: r.created_at,
+        chunksCount: Math.max(3, Math.round(r.file_size_kb / 400)),
+        totalTokens: Math.max(500, Math.round(r.file_size_kb * 1.8)),
+        ragStatus: 'indexed'
+      };
+    });
 
 
     res.json({ success: true, documents });
@@ -187,15 +201,27 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
     }
 
     const r = rows[0];
+    const ext = (r.file_type || path.extname(r.file_name || r.file_url || '').replace('.', '') || '').toLowerCase();
+    const isImage = (r.repository_type === 'photo') || 
+      ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(ext);
+
+    const resolvedFileUrl = r.cdn_file_id
+      ? cdnViewUrl(r.cdn_file_id)
+      : (r.file_url && !r.file_url.startsWith('db://') && !r.file_url.includes('drive.google.com'))
+        ? r.file_url
+        : `/api/documents/${r.id}/view`;
+
     const doc = {
       id: r.id,
       organizationId: r.organization_id,
       organizationName: r.organization_name,
       title: r.title,
       category: r.category,
+      repositoryType: isImage ? 'photo' : (r.repository_type || 'document'),
       fileType: r.file_type,
       fileSizeKb: r.file_size_kb,
-      fileUrl: (r.file_url && !r.file_url.startsWith('db://')) ? r.file_url : `/api/documents/${r.id}/download`,
+      fileUrl: resolvedFileUrl,
+      cdnFileId: r.cdn_file_id || null,
       year: r.year,
       department: r.department,
       summary: r.summary,
@@ -375,17 +401,23 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       }
     }
 
+    const isImageFile = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(rawExt.toLowerCase())
+      || repositoryType === 'photo';
+    const effectiveRepoType = isImageFile ? 'photo' : (repositoryType || 'document');
+
     // Auto generate default tags and summary for mock/RAG placeholder
     const generatedTags = JSON.stringify([
       category.toLowerCase().replace(/\s+/g, '-'),
-      repositoryType,
+      effectiveRepoType,
       'bumd',
       'internal',
       fileType.toLowerCase()
     ]);
     const summary = notes && notes.trim()
       ? notes.trim()
-      : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI.`;
+      : isImageFile
+        ? `Foto / Media visual resmi "${title.trim()}" kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI.`
+        : `Dokumen resmi ${title} kategori ${category} milik ${orgName}. Terindeks dan siap untuk penelusuran AI.`;
 
     const effectiveRole = req.authUser?.role || req.body.uploaderRole || 'user';
     const effectiveUserId = req.authUser?.id || req.body.uploadedById || null;
@@ -412,7 +444,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       targetOrgId,
       title.trim(),
       category,
-      repositoryType,
+      effectiveRepoType,
       fileType,
       fileSizeKb,
       fileUrl,
@@ -457,16 +489,22 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       console.warn('[ORG KB QUERY WARN]', kErr);
     }
 
+    const ragSummary = isImageFile
+      ? `Foto / Media visual resmi "${title.trim()}" (${docDisplayName}) kategori ${category} milik ${orgName}. ${notes && notes.trim() ? notes.trim() : 'Tersimpan aman di Kroombox Edge CDN.'}`
+      : summary;
+
     indexDocumentToRag({
       documentId: docId,
       organizationId: targetOrgId,
       knowledgeBaseId: targetKb,
       documentName: docDisplayName,
       contentBuffer: file ? file.buffer : null,
-      text: summary,
+      text: ragSummary,
       apiKey: projectKey.key,
       metadata: {
+        title: title.trim(),
         category,
+        repository_type: effectiveRepoType,
         year: Number(year) || new Date().getFullYear(),
         uploadedBy: uploadedBy || 'Admin',
         project_key_source: projectKey.source,
@@ -484,7 +522,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       organizationName: orgName,
       title: title.trim(),
       category,
-      repositoryType,
+      repositoryType: effectiveRepoType,
       fileType,
       fileSizeKb,
       fileUrl,
@@ -754,6 +792,102 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
   } catch (err: any) {
     console.error('[DELETE DOC ERROR]', err);
     res.status(500).json({ success: false, message: err?.message || 'Gagal menghapus dokumen.' });
+  }
+});
+
+// 5c. View / Render document inline (Untuk render <img>, <iframe>, dan pratinjau modal)
+router.get('/:id/view', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const p = getPool();
+
+    const [rows] = await p.query<any[]>(`
+      SELECT d.*, o.name as organization_name 
+      FROM documents d 
+      JOIN organizations o ON d.organization_id = o.id 
+      WHERE d.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      res.status(404).send('Dokumen tidak ditemukan.');
+      return;
+    }
+
+    const doc = rows[0];
+    const ext = (doc.file_type || path.extname(doc.file_name || doc.file_url || '').replace('.', '') || 'pdf').toLowerCase();
+    const safeTitle = (doc.title || doc.file_name || 'berkas').replace(/[/\\?%*:|"<>]/g, '_');
+    const viewFileName = safeTitle.toLowerCase().endsWith(`.${ext}`) ? safeTitle : `${safeTitle}.${ext}`;
+
+    const mimeMap: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      webp: 'image/webp',
+      gif: 'image/gif',
+      svg: 'image/svg+xml',
+      pdf: 'application/pdf',
+      txt: 'text/plain; charset=utf-8'
+    };
+    const defaultMime = mimeMap[ext] || 'application/octet-stream';
+
+    // 1. Kroombox CDN direct streaming (inline)
+    const cdnUrl = doc.cdn_file_id ? cdnViewUrl(doc.cdn_file_id) : null;
+    if (cdnUrl) {
+      try {
+        let cdnRes = await fetch(cdnUrl);
+        for (let attempt = 0; attempt < 2 && !cdnRes.ok; attempt++) {
+          await new Promise(r => setTimeout(r, 1000));
+          cdnRes = await fetch(cdnUrl);
+        }
+        if (cdnRes.ok && cdnRes.body) {
+          const contentType = cdnRes.headers.get('content-type') || defaultMime;
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          Readable.fromWeb(cdnRes.body as any).pipe(res);
+          return;
+        }
+      } catch (cdnErr) {
+        console.warn('[CDN VIEW STREAM WARN]', cdnErr);
+      }
+    }
+
+    // 2. Direct external URL (bukan Google drive)
+    if (doc.file_url && (doc.file_url.startsWith('http://') || doc.file_url.startsWith('https://')) && !doc.file_url.includes('drive.google.com')) {
+      try {
+        const extRes = await fetch(doc.file_url);
+        if (extRes.ok && extRes.body) {
+          res.setHeader('Content-Type', extRes.headers.get('content-type') || defaultMime);
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          Readable.fromWeb(extRes.body as any).pipe(res);
+          return;
+        }
+      } catch (extErr) {
+        console.warn('[EXTERNAL VIEW STREAM WARN]', extErr);
+      }
+    }
+
+    // 2b. Local file
+    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
+      const localFilePath = path.resolve('.' + doc.file_url);
+      if (fs.existsSync(localFilePath)) {
+        res.setHeader('Content-Type', defaultMime);
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
+        res.sendFile(localFilePath);
+        return;
+      }
+    }
+
+    // 3. Fallback PDF generator untuk dokumen tanpa berkas biner
+    const pdfBuf = generatePdfBuffer(doc.title, doc.organization_name, doc.category, doc.summary);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
+    res.send(pdfBuf);
+  } catch (err: any) {
+    console.error('[VIEW DOC ERROR]', err);
+    res.status(500).send('Gagal memuat pratinjau berkas.');
   }
 });
 

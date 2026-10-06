@@ -72,21 +72,18 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
  * dokumen/file -> type 'document'/'file' (kartu unduhan).
  */
 async function buildAttachments(docs: any[]): Promise<any[]> {
-  const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+  const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'];
   const IMAGE_MIMES = ['image/'];
 
   return Promise.all(docs.map(async (d: any) => {
     let url: string | null = null;
     if (d.cdn_file_id) {
-      // Tautan render langsung dari CDN (inline); signed URL bisa dialihkan ke Google Drive.
+      // Tautan render langsung dari Kroombox Edge CDN (inline)
       url = cdnViewUrl(d.cdn_file_id);
-    }
-    if (!url) {
-      if (d.file_url && (d.file_url.startsWith('http://') || d.file_url.startsWith('https://'))) {
-        url = d.file_url;
-      } else {
-        url = `/api/documents/${d.id}/download`;
-      }
+    } else if (d.file_url && (d.file_url.startsWith('http://') || d.file_url.startsWith('https://')) && !d.file_url.includes('drive.google.com')) {
+      url = d.file_url;
+    } else {
+      url = `/api/documents/${d.id}/view`;
     }
 
     const ext = String(d.file_type || d.file_name || '').toLowerCase().split('.').pop() || '';
@@ -128,9 +125,10 @@ function analyzeFileRequest(query: string): FileRequestCheck {
     return { isRequest: false, type: 'all', keywords: [] };
   }
 
-  const hasPhoto = /\b(foto|gambar|image|photo|dokumentasi|pic)\b/i.test(q) || q.includes('foto') || q.includes('gambar');
+  const hasPhoto = /\b(foto|gambar|image|photo|pic|screenshot|screencapture|tangkapan|dokumentasi)\b/i.test(q)
+    || q.includes('foto') || q.includes('gambar') || q.includes('screenshot') || q.includes('screencapture') || q.includes('tangkapan layar');
   const hasDoc = /\b(dokumen|document|sop|pedoman|laporan|sk|peraturan|kebijakan)\b/i.test(q) || q.includes('dokumen') || q.includes('pdf');
-  const hasFile = /\b(file|berkas|arsip|lampiran|unduh|download|link)\b/i.test(q) || q.includes('file');
+  const hasFile = /\b(file|berkas|arsip|lampiran|unduh|download|link)\b/i.test(q) || q.includes('file') || q.includes('link');
 
   const isFilePrompt = hasPhoto || hasDoc || hasFile;
   if (!isFilePrompt) {
@@ -144,7 +142,8 @@ function analyzeFileRequest(query: string): FileRequestCheck {
     'file', 'dokumen', 'foto', 'gambar', 'link', 'unduh', 'download', 'rag', 'berkas',
     'lampiran', 'arsip', 'apa', 'saja', 'ada', 'mana', 'kirim', 'kirimkan', 'berikan',
     'tampilkan', 'buka', 'lihat', 'untuk', 'dari', 'pada', 'dengan', 'saya', 'kami',
-    'kasih', 'bagikan', 'ambilkan', 'butuh', 'cari', 'carikan', 'adakah', 'apakah'
+    'kasih', 'bagikan', 'ambilkan', 'butuh', 'cari', 'carikan', 'adakah', 'apakah',
+    'coba', 'tes', 'test', 'kamu', 'anda', 'kalian', 'dia', 'mereka'
   ]);
 
   const rawWords = q.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 1);
@@ -187,7 +186,6 @@ async function handleFileRequest(
     console.warn('[DB DOCS FOR CHAT ERROR]', err);
   }
 
-
   if (rows.length === 0) {
     return {
       success: true,
@@ -208,14 +206,16 @@ async function handleFileRequest(
     const repoType = (doc.repository_type || 'document').toLowerCase();
     const fileType = (doc.file_type || '').toLowerCase();
 
+    const isImg = repoType === 'photo' || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(fileType);
+
     // Type filter bonus
     if (reqInfo.type === 'photo') {
-      if (repoType === 'photo' || ['png', 'jpg', 'jpeg', 'webp', 'image'].includes(fileType)) {
-        score += 15;
+      if (isImg) {
+        score += 25;
       }
     } else if (reqInfo.type === 'document') {
       if (repoType === 'document' || fileType === 'pdf' || fileType === 'docx' || fileType === 'txt') {
-        score += 10;
+        score += 15;
       }
     } else {
       score += 5;
@@ -224,10 +224,10 @@ async function handleFileRequest(
     // Keyword matching
     if (reqInfo.keywords.length > 0) {
       for (const kw of reqInfo.keywords) {
-        if (titleLower.includes(kw)) score += 20;
-        if (fnLower.includes(kw)) score += 15;
-        if (catLower.includes(kw)) score += 10;
-        if (sumLower.includes(kw)) score += 5;
+        if (titleLower.includes(kw)) score += 30;
+        if (fnLower.includes(kw)) score += 25;
+        if (catLower.includes(kw)) score += 15;
+        if (sumLower.includes(kw)) score += 10;
       }
     } else {
       score += 5;
@@ -235,18 +235,19 @@ async function handleFileRequest(
 
     return {
       ...doc,
-      score
+      score,
+      isImg
     };
   });
 
   // Filter matched items
   let matched = scored;
   if (reqInfo.keywords.length > 0) {
-    matched = scored.filter((d: any) => d.score > 5).sort((a: any, b: any) => b.score - a.score);
+    matched = scored.filter((d: any) => d.score > 10).sort((a: any, b: any) => b.score - a.score);
   } else if (reqInfo.type === 'photo') {
-    matched = scored.filter((d: any) => d.score >= 15).sort((a: any, b: any) => b.score - a.score);
+    matched = scored.filter((d: any) => d.score >= 25).sort((a: any, b: any) => b.score - a.score);
   } else if (reqInfo.type === 'document') {
-    matched = scored.filter((d: any) => d.score >= 10).sort((a: any, b: any) => b.score - a.score);
+    matched = scored.filter((d: any) => d.score >= 15).sort((a: any, b: any) => b.score - a.score);
   } else {
     matched = scored.sort((a: any, b: any) => b.score - a.score);
   }
@@ -258,14 +259,10 @@ async function handleFileRequest(
   for (const doc of docsToShow) {
     if (doc.cdn_file_id) {
       doc.cdnUrl = cdnViewUrl(doc.cdn_file_id);
-    }
-
-    if (!doc.cdnUrl) {
-      if (doc.file_url && !doc.file_url.startsWith('db://')) {
-        doc.cdnUrl = doc.file_url;
-      } else {
-        doc.cdnUrl = `/api/documents/${doc.id}/download`;
-      }
+    } else if (doc.file_url && !doc.file_url.startsWith('db://') && !doc.file_url.includes('drive.google.com')) {
+      doc.cdnUrl = doc.file_url;
+    } else {
+      doc.cdnUrl = `/api/documents/${doc.id}/view`;
     }
   }
 
@@ -275,21 +272,21 @@ async function handleFileRequest(
       `📁 **Berikut berkas resmi yang tersedia:**\n\n`;
   } else {
     const typeLabel = reqInfo.type === 'photo' ? 'Foto / Media' : (reqInfo.type === 'document' ? 'Dokumen' : 'Berkas / File');
-    answer = `Berikut adalah tautan berkas ${typeLabel.toLowerCase()} yang Anda minta dari **${orgName}**:\n\n`;
+    answer = `Berikut adalah berkas ${typeLabel.toLowerCase()} yang Anda minta dari **${orgName}**:\n\n`;
   }
 
   for (const d of docsToShow) {
-    const isImg = d.repository_type === 'photo' || ['png', 'jpg', 'jpeg', 'webp'].includes((d.file_type || '').toLowerCase());
+    const isImg = d.isImg || d.repository_type === 'photo' || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes((d.file_type || '').toLowerCase());
     const icon = isImg ? '🖼️' : '📄';
     const label = isImg ? 'Foto / Media' : 'Dokumen';
 
     answer += `${icon} **${d.title}**\n` +
-      `• **Jenis**: ${label} (${(d.file_type || 'PDF').toUpperCase()} · ${d.file_size_kb || 0} KB)\n` +
+      `• **Jenis**: ${label} (${(d.file_type || 'FILE').toUpperCase()} · ${d.file_size_kb || 0} KB)\n` +
       `• **Kategori**: ${d.category} · ${d.department || 'Umum'}\n` +
-      `• **Penyimpanan**: Repositori Digital Resmi (Kroombox Edge CDN)\n` +
-      (isImg && d.cdnUrl ? `![${d.title}](${d.cdnUrl})\n` : '') +
+      `• **Penyimpanan**: Kroombox Edge CDN (Resmi Terverifikasi)\n` +
+      (isImg && d.cdnUrl ? `\n![${d.title}](${d.cdnUrl})\n\n` : '') +
       `🔗 **Akses Berkas:**\n` +
-      `[📥 Unduh / Buka ${label}](${d.cdnUrl})\n\n`;
+      `[📥 Buka / Unduh ${label} Asli](${d.cdnUrl})\n\n`;
   }
 
   answer += `💡 *Tautan di atas terhubung langsung ke berkas resmi organisasi.*`;
@@ -385,6 +382,11 @@ router.post('/query', async (req: Request, res: Response): Promise<void> => {
           );
           if (attRows.length > 0) {
             result.attachments = await buildAttachments(attRows);
+            const imageAtts = result.attachments.filter((a: any) => a.type === 'image');
+            if (imageAtts.length > 0 && !result.answer.includes('![')) {
+              const imgMarkdown = imageAtts.map((img: any) => `\n\n🖼️ **${img.title}**\n![${img.title}](${img.url})\n🔗 [Buka / Unduh Foto Asli](${img.url})`).join('\n');
+              result.answer += imgMarkdown;
+            }
           }
         } catch (attErr) {
           console.warn('[CHAT ATTACHMENT FETCH WARN]', attErr);

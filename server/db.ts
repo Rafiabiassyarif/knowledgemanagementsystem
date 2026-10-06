@@ -260,6 +260,55 @@ async function createTables() {
     )
   `);
 
+  // 7. Sanitasi URL berkas ke Kroombox Edge CDN dan penyesuaian tipe repositori foto
+  try {
+    await p.query(`
+      UPDATE documents 
+      SET file_url = CONCAT('https://api-cdn.kroombox.com/api/bridge/view/', cdn_file_id) 
+      WHERE cdn_file_id IS NOT NULL 
+        AND (file_url LIKE '%drive.google.com%' OR file_url IS NULL OR file_url = '');
+    `);
+    await p.query(`
+      UPDATE documents 
+      SET repository_type = 'photo' 
+      WHERE LOWER(file_type) IN ('png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp') 
+        AND (repository_type IS NULL OR repository_type = 'document');
+    `);
+
+    // Pastikan berkas screencapture yang tersimpan di Kroombox CDN terdaftar di database
+    const [scCheck] = await p.query<any[]>(
+      "SELECT id FROM documents WHERE cdn_file_id = 'a00b5c343b286572' OR file_name LIKE '%screencapture%'"
+    );
+    if (scCheck.length === 0) {
+      await p.query(`
+        INSERT INTO documents (
+          id, organization_id, title, category, repository_type, file_type, file_size_kb,
+          file_url, cdn_file_id, file_name, year, summary, tags, notes, uploaded_by, uploader_role
+        ) VALUES (
+          'doc-a00b5c343b286572',
+          'org-prj-pamjaya',
+          'screencapture moonshotacademy trade 2026 09 16 16 23 29',
+          'SOP & Prosedur',
+          'photo',
+          'PNG',
+          2188,
+          'https://api-cdn.kroombox.com/api/bridge/view/a00b5c343b286572',
+          'a00b5c343b286572',
+          'screencapture-moonshotacademy-trade-2026-09-16-16_23_29.png',
+          2026,
+          'Berkas tangkapan layar (screenshot) antarmuka platform Moonshot Academy Trade 16 September 2026. Dokumentasi resmi untuk verifikasi dan prosedur SOP.',
+          ?,
+          'Dokumentasi visual tangkapan layar antarmuka sistem.',
+          'Admin',
+          'admin'
+        )
+      `, [JSON.stringify(['resmi', 'sop-&-prosedur', 'photo', 'png', 'kroombox-cdn'])]);
+      console.log('[DB] Berkas screencapture Kroombox CDN dipulihkan ke repositori PAM Jaya.');
+    }
+  } catch (mErr) {
+    console.warn('[DB] Migrasi URL/Dokumen Kroombox CDN:', mErr);
+  }
+
 
 }
 

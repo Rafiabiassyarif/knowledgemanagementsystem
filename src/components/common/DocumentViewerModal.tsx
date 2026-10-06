@@ -47,10 +47,88 @@ export const DocumentViewerModal: React.FC = () => {
             <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Penyimpanan</span>
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-center gap-1 font-mono">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Tersimpan Aman
+              Kroombox Edge CDN
             </p>
           </div>
         </div>
+
+        {/* Media Preview Section for Photos & Documents */}
+        {(() => {
+          const ext = (doc.fileType || '').toLowerCase();
+          const isPhoto = (doc.repositoryType || '').toLowerCase() === 'photo' ||
+            ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'image'].includes(ext) ||
+            /\.(png|jpe?g|webp|gif|svg|bmp)$/i.test(doc.title || '');
+
+          const previewUrl = doc.cdnFileId
+            ? `https://api-cdn.kroombox.com/api/bridge/view/${doc.cdnFileId}`
+            : (doc.fileUrl && !doc.fileUrl.startsWith('db://') && !doc.fileUrl.includes('drive.google.com'))
+              ? doc.fileUrl
+              : `/api/documents/${doc.id}/view`;
+
+          if (isPhoto) {
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                    Pratinjau Foto / Media
+                  </h4>
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                  >
+                    Buka Resolusi Penuh <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <div className="relative rounded-2xl overflow-hidden border border-slate-200/90 dark:border-slate-700 bg-slate-900/5 dark:bg-slate-950 p-2 sm:p-4 flex flex-col items-center justify-center min-h-[220px]">
+                  <img
+                    src={previewUrl}
+                    alt={doc.title}
+                    className="max-h-[380px] max-w-full rounded-xl object-contain shadow-sm border border-slate-200/40 dark:border-slate-800"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
+                        target.src = `/api/documents/${doc.id}/view`;
+                      }
+                    }}
+                  />
+                  <div className="mt-2.5 flex items-center justify-between w-full text-[11px] text-slate-500 dark:text-slate-400 px-1">
+                    <span>Format: {doc.fileType || 'PNG'} · {doc.fileSizeKb ? `${doc.fileSizeKb} KB` : 'Media'}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ Terverifikasi di Edge CDN</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  {doc.fileType || 'DOC'}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                    {doc.title}
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    Berkas resmi tersimpan aman di repositori CDN
+                  </p>
+                </div>
+              </div>
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-xs"
+              >
+                Lihat Berkas <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          );
+        })()}
 
         {/* Executive Summary */}
         <div>

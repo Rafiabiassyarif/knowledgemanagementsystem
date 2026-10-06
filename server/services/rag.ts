@@ -110,24 +110,46 @@ export async function indexDocumentToRag(params: IndexDocumentParams): Promise<{
       }
     }
 
-    // Format yang TIDAK didukung parser RAG (foto/gambar/biner): kirim sebagai
-    // knowledge berbasis teks (judul + deskripsi + URL CDN) supaya tetap masuk
-    // knowledge base dan bisa dicari. Berkas fisiknya tetap di Kroombox CDN dan
-    // tetap bisa dirender di chat via alur attachment.
-    const docExt = docName.slice(docName.lastIndexOf('.')).toLowerCase();
-    if (!RAG_SUPPORTED_EXTS.has(docExt) && contentBase64) {
+    // Format yang TIDAK didukung parser RAG (foto/gambar/biner/media):
+    // RAG server menolak ekstensi gambar (.png, .jpg, dll.) dengan 415 Unsupported Media Type.
+    // Kirim sebagai knowledge berbasis teks representasi kaya (.txt) berisi judul, kategori,
+    // ringkasan, dan tautan langsung CDN Kroombox agar tetap masuk knowledge base,
+    // dapat dicari oleh AI RAG, dan tautan CDN-nya dapat diberikan saat diminta.
+    const docExt = docName.includes('.') ? docName.slice(docName.lastIndexOf('.')).toLowerCase() : '';
+    const isImageOrUnsupported = !RAG_SUPPORTED_EXTS.has(docExt) ||
+      ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg', '.tif', '.tiff', '.ico'].includes(docExt);
+
+    if (isImageOrUnsupported) {
       const cdnUrl = params.metadata?.cdn_url || params.metadata?.file_url;
-      const baseName = docName.slice(0, docName.lastIndexOf('.')) || docName;
-      const priorDescription = textContent; // summary dari pemanggil (bila ada)
-      textContent = [
-        `Berkas media: ${baseName}`,
-        `Jenis berkas: ${docExt.replace('.', '').toUpperCase() || 'BINER'} (media/gambar)`,
-        cdnUrl ? `Tautan berkas: ${cdnUrl}` : null,
-        `Keterangan: ${priorDescription || params.metadata?.notes || 'Media dokumentasi organisasi.'}`
-      ].filter(Boolean).join('\n');
+      const baseName = docName.includes('.') ? docName.slice(0, docName.lastIndexOf('.')) : docName;
+      const cleanTitle = (params.metadata?.title || baseName).replace(/[-_]/g, ' ');
+      const category = params.metadata?.category || 'Dokumentasi & Media';
+      const year = params.metadata?.year || new Date().getFullYear();
+      const extLabel = (docExt.replace('.', '') || 'GAMBAR').toUpperCase();
+
+      const lines = [
+        `# DOKUMEN MEDIA & FOTO RESMI ORGANISASI: ${cleanTitle}`,
+        `- Kategori: ${category}`,
+        `- Jenis Berkas: Foto / Media Visual (${extLabel})`,
+        `- Tahun: ${year}`,
+        cdnUrl ? `- Tautan CDN Langsung: ${cdnUrl}` : null,
+        '',
+        `PANDUAN RESPONS & RENDERING AI (WAJIB DIIKUTI):`,
+        `Ketika pengguna meminta melihat foto, gambar, tangkapan layar (screenshot/screencapture), atau berkas ini:`,
+        `1. TAMPILKAN FOTONYA SECARA LANGSUNG MENGGUNAKAN MARKDOWN IMAGE:`,
+        cdnUrl ? `![${cleanTitle}](${cdnUrl})` : null,
+        `2. WAJIB BERIKAN TAUTAN KLIK LANGSUNG (JANGAN gunakan backticks \`...\`, gunakan format link [teks](url) agar bisa diklik langsung oleh pengguna):`,
+        cdnUrl ? `👉 [🔗 Klik di Sini untuk Membuka / Mengunduh Foto Langsung di CDN](${cdnUrl})` : null,
+        '',
+        `Keterangan & Rincian Berkas:`,
+        `${textContent || params.metadata?.notes || params.metadata?.summary || 'Dokumentasi foto dan bukti visual resmi organisasi yang tersimpan aman di repositori digital.'}`,
+        `Status Repositori: Berkas tersimpan resmi di Kroombox Edge CDN.`
+      ].filter(Boolean);
+
+      textContent = lines.join('\n');
       contentBase64 = null;
       docName = `${baseName}.txt`;
-      console.log(`[RAG SERVICE] Format "${docExt}" tidak didukung parser — dikirim sebagai entri teks.`);
+      console.log(`[RAG SERVICE] Format "${docExt}" (foto/media) dinormalisasi menjadi entri teks "${docName}" dengan instruksi render gambar markdown.`);
     }
 
     // If no file binary and no text, provide meaningful fallback metadata text
@@ -262,8 +284,17 @@ export function cleanRagOutput(text: string): string {
   cleaned = cleaned.replace(/\b(?:di|pada)\s+context\b/gi, 'dalam dokumen');
   cleaned = cleaned.replace(/\bcontext\b/gi, 'dokumen');
 
-  // 4. Clean up repetitive awkward phrasing
+  // 4. Clean up repetitive awkward phrasing and artificial media limitations
   cleaned = cleaned.replace(/Halaman\s*lainnya\s*tidak ada (?:di\s*)?dalam dokumen/gi, 'Halaman lainnya tidak memuat rincian tersebut.');
+  cleaned = cleaned.replace(/Keterbatasan:\s*media tidak bisa dilampirkan langsung[^\n]*/gi, '');
+  cleaned = cleaned.replace(/Isi gambarnya tidak descrito[^\n]*/gi, '');
+
+  // 5. Transform any CDN URLs trapped in code backticks into direct, clickable markdown links
+  cleaned = cleaned.replace(/`\s*(https:\/\/api-cdn\.kroombox\.com\/api\/bridge\/view\/[a-zA-Z0-9_-]+)\s*`/gi, '[$1]($1)');
+
+  // 6. Ensure bare CDN links become clickable if not already formatted in markdown
+  cleaned = cleaned.replace(/(?<!\]\(|\[|\"|\')https:\/\/api-cdn\.kroombox\.com\/api\/bridge\/view\/([a-zA-Z0-9_-]+)(?!\))/gi, '[👉 Buka Berkas Langsung di CDN](https://api-cdn.kroombox.com/api/bridge/view/$1)');
+
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
 
   return cleaned.trim();

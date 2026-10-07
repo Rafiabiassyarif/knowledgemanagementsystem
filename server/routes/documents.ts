@@ -8,6 +8,7 @@ import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
 import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl } from '../services/cdn';
 import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey } from '../services/ragKeys';
+import { reconcileRagDeletions, handleRagDocumentDeletedWebhook } from '../services/ragSync';
 
 const router = Router();
 
@@ -22,6 +23,13 @@ const upload = multer({
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId, category, search, repositoryType } = req.query;
+
+    // Rekonsiliasi otomatis: jika ada dokumen yang dihapus di https://rag.aiones.app/,
+    // dokumen tersebut akan otomatis terdeteksi dan dibersihkan dari MySQL & Kroombox CDN.
+    reconcileRagDeletions(organizationId as string, false).catch(syncErr => {
+      console.warn('[RAG AUTO-SYNC ON GET WARN]', syncErr?.message || syncErr);
+    });
+
     const p = getPool();
 
     let query = `
@@ -1037,6 +1045,36 @@ router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promi
   } catch (err: any) {
     console.error('[SYNC RAG ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal sinkronisasi ke RAG service.' });
+  }
+});
+
+// 12. Manual trigger: Rekonsiliasi sinkronisasi penghapusan dokumen dari https://rag.aiones.app/
+router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { organizationId } = req.body;
+    const result = await reconcileRagDeletions(organizationId, true);
+    res.json({
+      success: true,
+      message: result.purgedCount > 0
+        ? `${result.purgedCount} dokumen yang telah dihapus di RAG berhasil dibersihkan otomatis dari database dan Kroombox CDN.`
+        : 'Seluruh dokumen telah sinkron sempurna dengan RAG & Kroombox CDN.',
+      purgedCount: result.purgedCount,
+      purgedDocuments: result.purgedDocuments
+    });
+  } catch (err: any) {
+    console.error('[MANUAL SYNC RAG ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal melakukan sinkronisasi dengan RAG.', error: err.message });
+  }
+});
+
+// 13. Webhook: Endpoint publik untuk menerima notifikasi saat berkas dihapus langsung di RAG server
+router.post('/rag-webhook', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await handleRagDocumentDeletedWebhook(req.body);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[RAG WEBHOOK ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal memproses webhook RAG.', error: err.message });
   }
 });
 

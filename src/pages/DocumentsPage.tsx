@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
 import { DocumentCategory } from '../types';
-import { downloadProtectedFile, API_BASE_URL } from '../services/api';
+import { downloadProtectedFile, API_BASE_URL, api } from '../services/api';
 import { 
   FileText, 
   Search, 
@@ -24,7 +24,8 @@ import {
   HardDrive,
   FileCheck,
   ExternalLink,
-  Edit3
+  Edit3,
+  RefreshCw
 } from 'lucide-react';
 import { EditDocumentModal } from '../components/common/EditDocumentModal';
 import { DocumentItem } from '../types';
@@ -37,11 +38,14 @@ export const DocumentsPage: React.FC = () => {
     setSelectedDocForViewer, 
     deleteDocument,
     updateDocument,
+    refreshBackendData,
     organizations 
   } = useApp();
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [isSyncingRag, setIsSyncingRag] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [selectedRepoTab, setSelectedRepoTab] = useState<'all' | 'document' | 'photo' | 'knowledge'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -102,6 +106,33 @@ export const DocumentsPage: React.FC = () => {
       .catch(err => alert(err.message || 'Gagal mengunduh dokumen.'));
   };
 
+  const handleSyncRag = async () => {
+    setIsSyncingRag(true);
+    setSyncMessage(null);
+    try {
+      const res = await api.documents.syncRag(currentOrganization?.id || undefined);
+      await refreshBackendData();
+      if (res.success) {
+        setSyncMessage(res.message || 'Sinkronisasi RAG & CDN selesai.');
+        setTimeout(() => setSyncMessage(null), 6000);
+      }
+    } catch (err: any) {
+      console.warn('[SYNC RAG ERROR]', err);
+    } finally {
+      setIsSyncingRag(false);
+    }
+  };
+
+  useEffect(() => {
+    // Rekonsiliasi otomatis saat membuka halaman dokumen:
+    // Jika berkas dihapus di https://rag.aiones.app/, otomatis bersihkan dari MySQL & CDN.
+    api.documents.syncRag(currentOrganization?.id || undefined).then(res => {
+      if (res?.purgedCount && res.purgedCount > 0) {
+        refreshBackendData();
+      }
+    }).catch(() => {});
+  }, [currentOrganization?.id]);
+
   const resolveDocumentImageUrl = (doc: any) => {
     if (!doc) return '';
     if (doc.cdnFileId) {
@@ -147,6 +178,17 @@ export const DocumentsPage: React.FC = () => {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={handleSyncRag}
+            disabled={isSyncingRag}
+            className="group inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50"
+            title="Sinkronkan dengan RAG: otomatis menghapus dokumen lokal & CDN bila telah dihapus di https://rag.aiones.app/"
+          >
+            <RefreshCw className={`w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 ${isSyncingRag ? 'animate-spin' : ''}`} />
+            <span>{isSyncingRag ? 'Menyinkronkan...' : 'Sinkronkan RAG & CDN'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setUploadModalOpen(true)}
             className="group inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all duration-200 cursor-pointer"
           >
@@ -155,6 +197,23 @@ export const DocumentsPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Sync Status Banner */}
+      {syncMessage && (
+        <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200 flex items-center justify-between shadow-2xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>{syncMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncMessage(null)}
+            className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 text-xs font-bold px-2 py-0.5 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 2. Top Summary KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

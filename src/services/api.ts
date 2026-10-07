@@ -282,7 +282,7 @@ export const api = {
         body: JSON.stringify(updates),
       }),
     syncRag: (organizationId?: string) =>
-      request<{ success: boolean; message: string; count: number; knowledgeBase?: string }>('/documents/sync-rag', {
+      request<{ success: boolean; message: string; purgedCount?: number; purgedDocuments?: any[]; count?: number }>('/documents/sync-rag', {
         method: 'POST',
         body: JSON.stringify({ organizationId }),
       }),

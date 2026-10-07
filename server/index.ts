@@ -95,6 +95,26 @@ app.use('/api/cdn', requireAuth, cdnRoutes);
 // Chat RAG AI (query knowledge + render lampiran multi-dokumen CDN)
 app.use('/api/chat', requireAuth, chatRoutes);
 
+import { reconcileRagDeletions, handleRagDocumentDeletedWebhook } from './services/ragSync';
+
+// Webhook publik untuk notifikasi saat dokumen dihapus di server RAG (https://rag.aiones.app/)
+app.post('/api/webhooks/rag', async (req: Request, res: Response) => {
+  try {
+    const result = await handleRagDocumentDeletedWebhook(req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Gagal memproses webhook RAG.', error: err.message });
+  }
+});
+app.post('/api/rag/webhook', async (req: Request, res: Response) => {
+  try {
+    const result = await handleRagDocumentDeletedWebhook(req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Gagal memproses webhook RAG.', error: err.message });
+  }
+});
+
 // Global Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[UNHANDLED SERVER ERROR]', err);
@@ -111,10 +131,23 @@ async function startServer() {
     await initDatabase();
     console.log('[SERVER] Database MySQL siap & migrasi tabel selesai.');
 
+    // Background auto-sync (interval 45 detik):
+    // Mendeteksi bila berkas dihapus langsung di https://rag.aiones.app/,
+    // lalu otomatis menghapusnya dari database MySQL dan Kroombox Edge CDN.
+    const RAG_SYNC_INTERVAL_MS = 45 * 1000;
+    setInterval(async () => {
+      try {
+        await reconcileRagDeletions(undefined, true);
+      } catch (syncErr) {
+        console.warn('[RAG AUTO-SYNC BACKGROUND WARN]', syncErr);
+      }
+    }, RAG_SYNC_INTERVAL_MS);
+
     app.listen(PORT, () => {
       console.log(`=======================================================`);
       console.log(` KMS BUMD Backend Server berjalan di http://localhost:${PORT}`);
       console.log(` Terhubung ke MySQL Database (Laragon 3306)`);
+      console.log(` Sinkronisasi otomatis dua arah dengan RAG & Kroombox CDN aktif.`);
       console.log(`=======================================================`);
     });
   } catch (error) {

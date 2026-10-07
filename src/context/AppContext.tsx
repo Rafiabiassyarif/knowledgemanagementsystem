@@ -1476,6 +1476,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cleaned = cleaned.replace(/\b(?:di|pada)\s+context\b/gi, 'dalam dokumen');
     cleaned = cleaned.replace(/\bcontext\b/gi, 'dokumen');
     cleaned = cleaned.replace(/Halaman\s*lainnya\s*tidak ada (?:di\s*)?dalam dokumen/gi, 'Halaman lainnya tidak memuat rincian tersebut.');
+    // Untrap URLs in backticks so they render as interactive links
+    cleaned = cleaned.replace(/`\s*(https?:\/\/[^\s`]+)\s*`/gi, '[$1]($1)');
+    cleaned = cleaned.replace(/\[\s+/g, '[');
+    cleaned = cleaned.replace(/\s+\]\(/g, '](');
     return cleaned.trim();
   }
 

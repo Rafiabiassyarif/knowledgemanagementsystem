@@ -16,7 +16,6 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
       return [
         { to: '/app', label: 'Overview', icon: LayoutDashboard },
         { to: '/app/documents', label: 'Dokumen', icon: FileText },
-        { to: '/app/chat', label: 'Tanya AI', icon: MessageSquare },
         { to: '/app/cdn', label: 'CDN & RAG', icon: HardDrive },
         { to: '/app/projects', label: 'Project', icon: FolderKanban },
       ];
@@ -25,7 +24,6 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
     return [
       { to: '/app', label: 'Overview', icon: LayoutDashboard },
       { to: '/app/documents', label: 'Dokumen', icon: FileText },
-      { to: '/app/chat', label: 'Tanya AI', icon: MessageSquare },
       { to: '/app/projects', label: 'Project', icon: FolderKanban },
     ];
   };

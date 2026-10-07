@@ -51,18 +51,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
       return [
         { to: '/app', label: 'Overview', icon: LayoutDashboard },
         { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
-        { to: '/app/chat', label: 'Tanya AI (RAG)', icon: MessageSquare },
         { to: '/app/projects', label: 'Project', icon: FolderKanban },
         { to: '/app/cdn', label: 'Monitoring Edge CDN', icon: HardDrive },
         { to: '/app/users', label: 'Pengguna', icon: Users },
         { to: '/app/activity', label: 'Log Aktivitas', icon: Activity },
       ];
     } else {
-      // User Role - Halaman overview, repositori dokumen & pengetahuan, tanya ai, project
+      // User Role - Halaman overview, repositori dokumen & pengetahuan, project
       return [
         { to: '/app', label: 'Overview', icon: LayoutDashboard },
         { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
-        { to: '/app/chat', label: 'Tanya AI (RAG)', icon: MessageSquare },
         { to: '/app/projects', label: 'Project', icon: FolderKanban },
       ];
     }

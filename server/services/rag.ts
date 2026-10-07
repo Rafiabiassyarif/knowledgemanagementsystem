@@ -289,11 +289,15 @@ export function cleanRagOutput(text: string): string {
   cleaned = cleaned.replace(/Keterbatasan:\s*media tidak bisa dilampirkan langsung[^\n]*/gi, '');
   cleaned = cleaned.replace(/Isi gambarnya tidak descrito[^\n]*/gi, '');
 
-  // 5. Transform any CDN URLs trapped in code backticks into direct, clickable markdown links
-  cleaned = cleaned.replace(/`\s*(https:\/\/api-cdn\.kroombox\.com\/api\/bridge\/view\/[a-zA-Z0-9_-]+)\s*`/gi, '[$1]($1)');
+  // 5. Transform any URLs trapped in code backticks into direct, clickable markdown links
+  cleaned = cleaned.replace(/`\s*(https?:\/\/[^\s`]+)\s*`/gi, '[$1]($1)');
 
   // 6. Ensure bare CDN links become clickable if not already formatted in markdown
-  cleaned = cleaned.replace(/(?<!\]\(|\[|\"|\')https:\/\/api-cdn\.kroombox\.com\/api\/bridge\/view\/([a-zA-Z0-9_-]+)(?!\))/gi, '[👉 Buka Berkas Langsung di CDN](https://api-cdn.kroombox.com/api/bridge/view/$1)');
+  cleaned = cleaned.replace(/(?<!\]\(|\[|\"|\')(https:\/\/api-cdn\.kroombox\.com\/api\/bridge\/view\/[a-zA-Z0-9_.-]+)(?!\))/gi, '[📥 Buka Berkas Langsung di CDN]($1)');
+
+  // 7. Normalize spaces inside markdown brackets (e.g. "[ 📥 Unduh ...]" -> "[📥 Unduh ...]")
+  cleaned = cleaned.replace(/\[\s+/g, '[');
+  cleaned = cleaned.replace(/\s+\]\(/g, '](');
 
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
 

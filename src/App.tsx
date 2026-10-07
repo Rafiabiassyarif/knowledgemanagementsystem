@@ -18,7 +18,6 @@ import { JoinOrgPage } from './pages/JoinOrgPage';
 import { LandingPage } from './pages/LandingPage';
 // SEMBUNYI SEMENTARA: halaman manajemen paket & kuota belum dipublikasikan
 // import { QuotaManagementPage } from './pages/QuotaManagementPage';
-import { AskAIPage } from './pages/AskAIPage';
 import { CdnMonitoringPage } from './pages/CdnMonitoringPage';
 
 export default function App() {
@@ -36,8 +35,8 @@ export default function App() {
           {/* Unified Application Routes for all roles at /app */}
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<DashboardPage />} />
-            <Route path="chat" element={<AskAIPage />} />
-            <Route path="tanya-ai" element={<Navigate to="/app/chat" replace />} />
+            <Route path="chat" element={<Navigate to="/app/documents" replace />} />
+            <Route path="tanya-ai" element={<Navigate to="/app/documents" replace />} />
             <Route path="projects" element={<OrganizationsPage />} />
             <Route path="projects/:id" element={<OrganizationDetailPage />} />
             <Route path="organizations" element={<Navigate to="/app/projects" replace />} />

@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
-import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl } from '../services/cdn';
+import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl, downloadFromKroomboxCDN } from '../services/cdn';
 import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey } from '../services/ragKeys';
 import { reconcileRagDeletions, handleRagDocumentDeletedWebhook } from '../services/ragSync';
@@ -996,7 +996,11 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
   }
 });
 
-// 7. Sync database documents to RAG Service (dengan Knowledge Base per project)
+// 7. Re-index dokumen ke RAG Service (Knowledge Base per project).
+// PENTING: isi berkas ASLI diunduh dari Kroombox CDN lalu dikirim sebagai content_base64.
+// Sebelumnya fungsi ini hanya mengirim ringkasan teks dengan replace:true, sehingga RAG
+// menyimpan 1 chunk dangkal (~13 token) dan ISI DOKUMEN HILANG. Dokumen yang isinya tidak
+// berhasil diunduh DILEWATI (bukan ditimpa ringkasan) agar data yang sudah benar tidak rusak.
 router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const orgId = (req.body?.organizationId || req.query?.organizationId) as string | undefined;
@@ -1014,22 +1018,33 @@ router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promi
 
     const [docs] = await p.query<any[]>(query, params);
     let indexedCount = 0;
+    let skippedCount = 0;
 
     for (const doc of docs) {
+      // Ambil isi berkas asli dari CDN. Tanpa ini, jangan menimpa entri RAG yang sudah ada.
+      const contentBuffer = await downloadFromKroomboxCDN(doc.cdn_file_id);
+      if (!contentBuffer) {
+        console.warn(`[SYNC RAG SKIP] Isi berkas ${doc.cdn_file_id || doc.id} tidak dapat diunduh dari CDN — entri RAG dibiarkan utuh.`);
+        skippedCount++;
+        continue;
+      }
+
       const projectKey = await ensureProjectRagKey(doc.organization_id, doc.org_name);
       await indexDocumentToRag({
         documentId: doc.id,
         organizationId: doc.organization_id,
         knowledgeBaseId: doc.knowledge_base || null,
         documentName: doc.file_name || `${doc.title}.${(doc.file_type || 'PDF').toLowerCase()}`,
-        contentBuffer: null,
+        contentBuffer,
         text: doc.summary || doc.title,
         apiKey: projectKey.key,
         metadata: {
           category: doc.category,
           year: doc.year,
           uploadedBy: doc.uploaded_by,
-          knowledge_base: doc.knowledge_base || null
+          knowledge_base: doc.knowledge_base || null,
+          cdn_url: doc.file_url,
+          cdn_file_id: doc.cdn_file_id
         }
       });
       indexedCount++;
@@ -1038,8 +1053,10 @@ router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promi
     const kbName = docs.length > 0 && docs[0].knowledge_base ? docs[0].knowledge_base : 'Tenant Default';
     res.json({
       success: true,
-      message: `Berhasil menghubungkan dan mensinkronisasikan ${indexedCount} dokumen ke RAG Service (Knowledge Base: ${kbName}).`,
+      message: `Berhasil menyinkronkan ${indexedCount} dokumen (isi lengkap) ke RAG Service (Knowledge Base: ${kbName})`
+        + (skippedCount > 0 ? `. ${skippedCount} dokumen dilewati karena berkas CDN belum siap.` : '.'),
       count: indexedCount,
+      skipped: skippedCount,
       knowledgeBase: kbName
     });
   } catch (err: any) {
@@ -1049,7 +1066,8 @@ router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promi
 });
 
 // 12. Manual trigger: Rekonsiliasi sinkronisasi penghapusan dokumen dari https://rag.aiones.app/
-router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
+// (dipisah dari /sync-rag agar re-index tidak tertukar dengan rekonsiliasi penghapusan)
+router.post('/reconcile-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.body;
     const result = await reconcileRagDeletions(organizationId, true);

@@ -124,9 +124,10 @@ export const DocumentsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    // Rekonsiliasi otomatis saat membuka halaman dokumen:
-    // Jika berkas dihapus di https://rag.aiones.app/, otomatis bersihkan dari MySQL & CDN.
-    api.documents.syncRag(currentOrganization?.id || undefined).then(res => {
+    // Rekonsiliasi penghapusan otomatis saat membuka halaman dokumen:
+    // bila berkas dihapus di https://rag.aiones.app/, bersihkan dari MySQL & CDN.
+    // TIDAK memanggil /sync-rag (re-index) — dulu itu menimpa isi dokumen dengan ringkasan.
+    api.documents.reconcileRag(currentOrganization?.id || undefined).then(res => {
       if (res?.purgedCount && res.purgedCount > 0) {
         refreshBackendData();
       }

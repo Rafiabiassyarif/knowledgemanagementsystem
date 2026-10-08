@@ -286,6 +286,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ organizationId }),
       }),
+    reconcileRag: (organizationId?: string) =>
+      request<{ success: boolean; message: string; purgedCount?: number; purgedDocuments?: any[] }>('/documents/reconcile-rag', {
+        method: 'POST',
+        body: JSON.stringify({ organizationId }),
+      }),
   },
 
   // 5. Activity Logs API

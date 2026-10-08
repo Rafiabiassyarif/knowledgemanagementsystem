@@ -186,3 +186,35 @@ export async function deleteFromKroomboxCDN(fileId: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Unduh ISI ASLI berkas dari Kroombox Edge CDN (byte mentah).
+ *
+ * Dipakai untuk re-index ke RAG: tanpa ini, sinkronisasi hanya mengirim ringkasan
+ * teks sehingga RAG menyimpan 1 chunk dangkal dan isi dokumen sebenarnya HILANG.
+ * CDN sempat membalas "pending" (302 ke Google Drive) beberapa detik setelah unggah,
+ * jadi percobaan diulang beberapa kali sebelum menyerah.
+ */
+export async function downloadFromKroomboxCDN(fileId: string, maxAttempts = 4): Promise<Buffer | null> {
+  if (!fileId) return null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(cdnViewUrl(fileId), {
+        headers: { 'x-api-key': CDN_API_KEY, 'Authorization': `Bearer ${CDN_JWT_TOKEN}` },
+        redirect: 'follow'
+      });
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 0) return buf;
+        console.warn(`[CDN DOWNLOAD WARN] Berkas ${fileId} kosong (0 byte).`);
+        return null;
+      }
+      // 404/202 = berkas belum siap di CDN, tunggu lalu coba lagi.
+      console.warn(`[CDN DOWNLOAD WARN] HTTP ${res.status} untuk ${fileId} (percobaan ${attempt}/${maxAttempts}).`);
+    } catch (err: any) {
+      console.warn(`[CDN DOWNLOAD WARN] ${err?.message || err} (percobaan ${attempt}/${maxAttempts}).`);
+    }
+    if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 3000));
+  }
+  return null;
+}

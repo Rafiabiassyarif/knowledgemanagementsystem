@@ -131,13 +131,14 @@ async function startServer() {
     await initDatabase();
     console.log('[SERVER] Database MySQL siap & migrasi tabel selesai.');
 
-    // Background auto-sync (interval 45 detik):
-    // Mendeteksi bila berkas dihapus langsung di https://rag.aiones.app/,
-    // lalu otomatis menghapusnya dari database MySQL dan Kroombox Edge CDN.
+    // Background auto-sync (interval 45 detik): HANYA MEMERIKSA (dry-run).
+    // Penghapusan otomatis dimatikan karena pernah menghilangkan data produksi
+    // (nama berkas di DB NULL -> dokumen dianggap terhapus di RAG).
+    // Penghapusan kini hanya berjalan saat admin menekan tombol sinkronisasi manual.
     const RAG_SYNC_INTERVAL_MS = 45 * 1000;
     setInterval(async () => {
       try {
-        await reconcileRagDeletions(undefined, true);
+        await reconcileRagDeletions(undefined, true, false);
       } catch (syncErr) {
         console.warn('[RAG AUTO-SYNC BACKGROUND WARN]', syncErr);
       }

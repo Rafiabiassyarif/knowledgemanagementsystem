@@ -164,10 +164,10 @@ export const DocumentsPage: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               Terindeks AI
             </span>
-            {currentOrganization && (
+            {(currentOrganization || currentUser?.role === 'admin') && (
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium flex items-center gap-1.5">
                 <FolderKanban className="w-3 h-3 text-blue-500" />
-                <span>Proyek: <strong className="font-semibold">{currentOrganization.name}</strong></span>
+                <span>Cakupan: <strong className="font-semibold">{currentUser?.role === 'admin' ? `Semua Project (${organizations.length})` : currentOrganization?.name}</strong></span>
               </span>
             )}
           </div>

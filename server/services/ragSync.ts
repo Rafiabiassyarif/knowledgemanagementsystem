@@ -15,11 +15,15 @@ let lastSyncTimestamp = 0;
 const MIN_SYNC_INTERVAL_MS = 15 * 1000; // 15 seconds throttle
 
 /**
- * Reconciles the local database and CDN with the RAG service at https://rag.aiones.app/.
- * When a document was deleted on https://rag.aiones.app/, it is automatically
- * removed from this project's MySQL database and permanently deleted from Kroombox CDN.
+ * Rekonsiliasi database lokal & CDN dengan layanan RAG di https://rag.aiones.app/.
+ *
+ * PENGAMAN: secara default fungsi ini HANYA MEMERIKSA (dry-run) dan tidak pernah
+ * menghapus apa pun. Penghapusan otomatis pernah menyebabkan data produksi hilang
+ * (nama berkas di DB NULL sehingga dokumen dianggap "sudah dihapus di RAG").
+ * Penghapusan hanya berjalan bila `allowDelete` bernilai true — yaitu saat admin
+ * menekan tombol sinkronisasi manual.
  */
-export async function reconcileRagDeletions(orgId?: string, force: boolean = false): Promise<ReconcileResult> {
+export async function reconcileRagDeletions(orgId?: string, force: boolean = false, allowDelete: boolean = false): Promise<ReconcileResult> {
   const now = Date.now();
   if (!force && (now - lastSyncTimestamp) < MIN_SYNC_INTERVAL_MS) {
     return { success: true, purgedCount: 0, purgedDocuments: [] };
@@ -62,7 +66,8 @@ export async function reconcileRagDeletions(orgId?: string, force: boolean = fal
       const kbId = org.knowledge_base;
       try {
         // 2. Fetch list of active documents for this knowledge base from RAG
-        const ragUrl = `${RAG_BASE_URL}/api/v1/knowledge?knowledge_base_id=${encodeURIComponent(kbId)}&limit=1000`;
+        // Catatan: RAG menolak limit > 500 (422), jadi pakai 500.
+        const ragUrl = `${RAG_BASE_URL}/api/v1/knowledge?knowledge_base_id=${encodeURIComponent(kbId)}&limit=500`;
         const res = await fetch(ragUrl, {
           headers: {
             'Authorization': `Bearer ${RAG_API_KEY}`
@@ -122,12 +127,14 @@ export async function reconcileRagDeletions(orgId?: string, force: boolean = fal
             activeRagIds.has(docIdLower) ||
             (cdnFileIdLower && activeRagIds.has(`doc-seed-${cdnFileIdLower}`)) ||
             (cdnFileIdLower && Array.from(activeRagIds).some(rid => rid.includes(cdnFileIdLower))) ||
-            activeRagNames.has(fileNameLower) ||
-            activeRagNames.has(baseFileNameLower) ||
+            (fileNameLower && activeRagNames.has(fileNameLower)) ||
+            (baseFileNameLower && activeRagNames.has(baseFileNameLower)) ||
             (titleLower && activeRagNames.has(titleLower));
 
-          // Jika dokumen tidak ditemukan sama sekali di RAG, berarti telah dihapus di https://rag.aiones.app/!
-          if (!existsInRag) {
+          // Jika dokumen tidak ditemukan di RAG, dokumen mungkin sudah dihapus di
+          // https://rag.aiones.app/. Penghapusan HANYA dijalankan bila allowDelete=true
+          // (tombol sinkronisasi manual admin) — worker latar belakang tidak menghapus apa pun.
+          if (!existsInRag && allowDelete) {
             console.log(`[RAG SYNC -> PURGE] Dokumen "${doc.title}" (${doc.id}) terdeteksi telah dihapus di https://rag.aiones.app/. Memulai pembersihan otomatis dari CDN & database...`);
 
             // 1. Hapus aset fisik dari Kroombox Edge CDN

@@ -26,7 +26,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 
     // Rekonsiliasi otomatis: jika ada dokumen yang dihapus di https://rag.aiones.app/,
     // dokumen tersebut akan otomatis terdeteksi dan dibersihkan dari MySQL & Kroombox CDN.
-    reconcileRagDeletions(organizationId as string, false).catch(syncErr => {
+    reconcileRagDeletions(organizationId as string, false, false).catch(syncErr => {
       console.warn('[RAG AUTO-SYNC ON GET WARN]', syncErr?.message || syncErr);
     });
 
@@ -1071,7 +1071,7 @@ router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promi
 router.post('/reconcile-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.body;
-    const result = await reconcileRagDeletions(organizationId, true);
+    const result = await reconcileRagDeletions(organizationId, true, true);
     res.json({
       success: true,
       message: result.purgedCount > 0

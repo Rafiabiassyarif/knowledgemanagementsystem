@@ -20,7 +20,18 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
           (SELECT email FROM users u WHERE u.organization_id = o.id AND u.role = 'admin' LIMIT 1),
           o.email
         ) as adminEmail,
+        -- Pemilik project = pembuat asli (created_by); fallback ke admin_name lama
+        COALESCE(
+          (SELECT name FROM users u WHERE u.id = o.created_by LIMIT 1),
+          o.admin_name
+        ) as ownerName,
+        COALESCE(
+          (SELECT email FROM users u WHERE u.id = o.created_by LIMIT 1),
+          (SELECT email FROM users u WHERE u.organization_id = o.id AND u.role = 'admin' LIMIT 1),
+          o.email
+        ) as ownerEmail,
         (SELECT COUNT(*) FROM documents d WHERE d.organization_id = o.id) as documentsCount,
+        (SELECT COALESCE(SUM(d.chunks_count), 0) FROM documents d WHERE d.organization_id = o.id) as chunksCount,
         (SELECT COUNT(*) FROM users u WHERE u.organization_id = o.id) as usersCount
       FROM organizations o
     `;
@@ -59,13 +70,13 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       email: r.email,
       website: r.website,
       description: r.description,
-      adminName: r.admin_name,
-      adminEmail: r.adminEmail || r.email || null,
+      adminName: r.ownerName || r.admin_name,
+      adminEmail: r.ownerEmail || r.adminEmail || r.email || null,
       createdBy: r.created_by || null,
       status: r.status,
       documentsCount: Number(r.documentsCount) || 0,
       usersCount: Number(r.usersCount) || 0,
-      chunksCount: (Number(r.documentsCount) || 0) * 12,
+      chunksCount: Number(r.chunksCount) || 0,
       aiQueriesCount: 0,
       storageUsedMb: Math.round((Number(r.documentsCount) || 0) * 4.5),
       createdAt: r.created_at
@@ -93,6 +104,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
           o.email
         ) as adminEmail,
         (SELECT COUNT(*) FROM documents d WHERE d.organization_id = o.id) as documentsCount,
+        (SELECT COALESCE(SUM(d.chunks_count), 0) FROM documents d WHERE d.organization_id = o.id) as chunksCount,
         (SELECT COUNT(*) FROM users u WHERE u.organization_id = o.id) as usersCount
       FROM organizations o
       WHERE o.id = ?
@@ -128,13 +140,13 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
       email: r.email,
       website: r.website,
       description: r.description,
-      adminName: r.admin_name,
-      adminEmail: r.adminEmail || r.email || null,
+      adminName: r.ownerName || r.admin_name,
+      adminEmail: r.ownerEmail || r.adminEmail || r.email || null,
       createdBy: r.created_by || null,
       status: r.status,
       documentsCount: Number(r.documentsCount) || 0,
       usersCount: Number(r.usersCount) || 0,
-      chunksCount: (Number(r.documentsCount) || 0) * 12,
+      chunksCount: Number(r.chunksCount) || 0,
       aiQueriesCount: 0,
       storageUsedMb: Math.round((Number(r.documentsCount) || 0) * 4.5),
       createdAt: r.created_at

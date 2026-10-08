@@ -37,7 +37,8 @@ export const LoginPage: React.FC = () => {
         setErrorMessage(res.message || 'Email atau kata sandi tidak sesuai.');
         return;
       }
-      navigate('/app');
+      // Admin masuk ke konsol pengelolaan; user biasa ke portal /app
+      navigate(res.user?.role === 'admin' ? '/admin' : '/app');
     } finally {
       setIsLoading(false);
     }

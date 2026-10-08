@@ -33,11 +33,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileMenu }) => {
     navigate('/login');
   };
 
-  const roleLabel = currentUser?.role === 'superadmin' 
-    ? 'Superadmin Platform' 
-    : currentUser?.role === 'admin' 
-      ? 'Admin Organisasi' 
-      : 'Pengguna';
+  const roleLabel = currentUser?.role === 'admin' ? 'Admin Pengelola' : 'Pengguna';
 
   return (
     <>
@@ -170,7 +166,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileMenu }) => {
                   {currentUser?.name || 'Pengguna'}
                 </span>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-none mt-0.5">
-                  {currentUser?.role === 'superadmin' ? 'Superadmin' : currentUser?.role === 'admin' ? 'Admin' : 'Pengguna'}
+                  {currentUser?.role === 'admin' ? 'Admin' : 'Pengguna'}
                 </span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />

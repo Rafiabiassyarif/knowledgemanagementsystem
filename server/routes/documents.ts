@@ -62,16 +62,17 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 
     // Role-based visibility:
     // User biasa HANYA melihat dokumen yang di-upload oleh user atau dokumen milik sendiri.
-    // Admin & Superadmin melihat SEMUA dokumen (baik unggahan admin maupun unggahan user).
+    // Admin melihat SEMUA dokumen (baik unggahan admin maupun unggahan user).
     if (req.authUser && req.authUser.role === 'user') {
       conditions.push('(d.uploader_role = "user" OR d.uploader_role IS NULL OR d.uploaded_by_id = ?)');
       params.push(req.authUser.id);
     }
 
     // Project Isolation:
-    // Superadmin dapat memantau seluruh dokumen.
-    // User & Admin hanya melihat dokumen dalam project milik mereka sendiri.
-    if (req.authUser && req.authUser.role !== 'superadmin') {
+    // Admin dapat memantau seluruh dokumen.
+    // User hanya melihat dokumen dalam project milik mereka sendiri.
+    // Admin mengelola SEMUA dokumen; user biasa hanya dokumen project miliknya.
+    if (req.authUser && req.authUser.role !== 'admin') {
       conditions.push('(o.created_by = ? OR o.id = (SELECT organization_id FROM users WHERE id = ?) OR (o.created_by IS NULL AND o.admin_name = ?))');
       params.push(req.authUser.id, req.authUser.id, req.authUser.name);
     }
@@ -142,7 +143,7 @@ router.get('/quota/:userId', requireAuth, async (req: Request, res: Response): P
       return;
     }
     const u = userRows[0];
-    const isUnlimited = u.role === 'superadmin' || u.role === 'admin' || u.plan === 'enterprise';
+    const isUnlimited = u.role === 'admin' || u.plan === 'enterprise';
     const [countRows] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM documents WHERE uploaded_by_id = ?', [userId]);
     const currentCount = countRows[0].cnt || 0;
     const maxQuota = isUnlimited ? 999999 : (u.doc_quota || 5);
@@ -429,7 +430,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
 
     const effectiveRole = req.authUser?.role || req.body.uploaderRole || 'user';
     const effectiveUserId = req.authUser?.id || req.body.uploadedById || null;
-    const effectiveUserName = req.authUser?.name || req.body.uploadedBy || (effectiveRole === 'admin' || effectiveRole === 'superadmin' ? 'Admin' : 'Pengguna');
+    const effectiveUserName = req.authUser?.name || req.body.uploadedBy || (effectiveRole === 'admin' ? 'Admin' : 'Pengguna');
 
     await p.query(`
       INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, cdn_file_id, file_name, year, summary, tags, notes, uploaded_by, uploaded_by_id, uploader_role)
@@ -691,7 +692,7 @@ router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
     }
 
     const doc = rows[0];
-    // Check permission: user can only edit their own doc unless admin/superadmin
+    // Check permission: user can only edit their own doc unless admin
     if (req.authUser && req.authUser.role === 'user' && doc.uploaded_by_id && doc.uploaded_by_id !== req.authUser.id) {
       res.status(403).json({ success: false, message: 'Anda hanya dapat mengedit dokumen yang Anda unggah.' });
       return;

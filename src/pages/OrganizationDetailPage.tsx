@@ -675,7 +675,7 @@ print(res.json()["data"]["answer"])`}</pre>
           </form>
 
           {/* Danger Zone: Delete Organization */}
-          {(currentUser?.role === 'superadmin' || (currentUser?.role === 'admin' && (currentUser.organizationId === org.id || org.adminId === currentUser.id))) && (
+          {currentUser?.role === 'admin' && (
             <div className="pt-5 border-t border-slate-200 dark:border-slate-800 mt-6 space-y-3">
               <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
                 <AlertTriangle className="w-4 h-4" />

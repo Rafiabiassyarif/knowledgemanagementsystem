@@ -44,26 +44,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
     navigate('/login');
   };
 
+  // Portal /app hanya untuk pengguna (user). Admin memakai konsol terpisah di /admin.
   const getNavLinks = (): NavItem[] => {
     if (!currentUser) return [];
-
-    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
-      return [
-        { to: '/app', label: 'Overview', icon: LayoutDashboard },
-        { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
-        { to: '/app/projects', label: 'Project', icon: FolderKanban },
-        { to: '/app/cdn', label: 'Monitoring Edge CDN', icon: HardDrive },
-        { to: '/app/users', label: 'Pengguna', icon: Users },
-        { to: '/app/activity', label: 'Log Aktivitas', icon: Activity },
-      ];
-    } else {
-      // User Role - Halaman overview, repositori dokumen & pengetahuan, project
-      return [
-        { to: '/app', label: 'Overview', icon: LayoutDashboard },
-        { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
-        { to: '/app/projects', label: 'Project', icon: FolderKanban },
-      ];
-    }
+    return [
+      { to: '/app', label: 'Overview', icon: LayoutDashboard },
+      { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
+      { to: '/app/projects', label: 'Project', icon: FolderKanban },
+    ];
   };
 
   const navLinks = getNavLinks();
@@ -93,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
                   </span>
                   <div className="mt-1 flex items-center">
                     <span className="text-[9px] font-semibold tracking-wider font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60 truncate">
-                      {currentUser?.role === 'admin' || currentUser?.role === 'superadmin' ? 'ADMIN' : 'USER'}
+                      {currentUser?.role === 'admin' ? 'ADMIN' : 'USER'}
                     </span>
                   </div>
                 </div>
@@ -129,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-3'} py-3`}>
           {!sidebarCollapsed ? (
             <span className="px-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-              {currentUser?.role === 'admin' || currentUser?.role === 'superadmin' ? 'Menu Admin' : 'Menu Pengguna'}
+              {currentUser?.role === 'admin' ? 'Menu Admin' : 'Menu Pengguna'}
             </span>
           ) : (
             <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 mb-2" />

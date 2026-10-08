@@ -79,7 +79,7 @@ function loginRateLimit(req: Request, res: Response, next: NextFunction): void {
 }
 app.use('/api/auth/login', loginRateLimit);
 
-// Public: auth endpoints (login, register, superadmin-login)
+  // Public: auth endpoints (login, register)
 app.use('/api/auth', authRoutes);
 
 // Projects / Organizations: GET endpoints are public, mutations are protected inside router

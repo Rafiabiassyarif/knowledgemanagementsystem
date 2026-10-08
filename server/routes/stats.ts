@@ -8,8 +8,9 @@ router.get('/dashboard', async (req: Request, res: Response): Promise<void> => {
     const { organizationId, role } = req.query;
     const p = getPool();
 
-    if (role === 'superadmin' || !organizationId || organizationId === 'all') {
-      // Global Platform Stats for Superadmin
+    // Admin melihat statistik global seluruh project.
+    if (role === 'admin' || !organizationId || organizationId === 'all') {
+      // Global Platform Stats (admin)
       const [[orgCount]] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM organizations');
       const [[docCount]] = await p.query<any[]>('SELECT COUNT(*) as cnt, COALESCE(SUM(file_size_kb), 0) as totalKb FROM documents');
       const [[userCount]] = await p.query<any[]>('SELECT COUNT(*) as cnt FROM users');

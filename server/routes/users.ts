@@ -51,8 +51,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 2. Add user to organization (admin & superadmin only)
-router.post('/', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+// 2. Add user to organization (admin only)
+router.post('/', requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, organizationId, role = 'user', password, department, position } = req.body;
     if (!name || !email) {
@@ -119,7 +119,7 @@ router.post('/', requireRole('admin', 'superadmin'), async (req: Request, res: R
   }
 });
 
-// 3. Update user (self, admin of the same organization, or superadmin)
+// 3. Update user (self atau admin)
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -136,18 +136,18 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
     const target = targetRows[0];
 
     const isSelf = actor.id === id;
-    const isSuperadmin = actor.role === 'superadmin';
+    const isAdmin = actor.role === 'admin';
     const isSameOrgAdmin = actor.role === 'admin' && !!actor.organizationId && target.organization_id === actor.organizationId;
 
-    if (!isSelf && !isSuperadmin && !isSameOrgAdmin) {
+    if (!isSelf && !isAdmin && !isSameOrgAdmin) {
       res.status(403).json({ success: false, message: 'Anda tidak memiliki wewenang untuk memperbarui data pengguna ini.' });
       return;
     }
 
-    // Only superadmin may change role / status / organization assignment via this endpoint
-    const safeRole = isSuperadmin ? role : undefined;
-    const safeStatus = isSuperadmin ? status : undefined;
-    const safeOrganizationId = isSuperadmin ? organizationId : undefined;
+    // Hanya admin yang boleh mengubah role / status / penugasan project lewat endpoint ini
+    const safeRole = isAdmin ? role : undefined;
+    const safeStatus = isAdmin ? status : undefined;
+    const safeOrganizationId = isAdmin ? organizationId : undefined;
 
     const initials = name ? name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : undefined;
 
@@ -169,8 +169,8 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 4. Update user role (promote to admin or demote to user) - superadmin only
-router.patch('/:id/role', requireRole('superadmin'), async (req: Request, res: Response): Promise<void> => {
+// 4. Update user role (promote to admin or demote to user) - admin only
+router.patch('/:id/role', requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { role } = req.body;
@@ -225,8 +225,8 @@ router.post('/:id/eject', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-// 6. Update user account status (suspend / re-activate) - admin & superadmin only
-router.patch('/:id/status', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+// 6. Update user account status (suspend / re-activate) - admin only
+router.patch('/:id/status', requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const actor = req.authUser!;
@@ -257,15 +257,12 @@ router.patch('/:id/status', requireRole('admin', 'superadmin'), async (req: Requ
 
     const target = rows[0];
 
-    if (target.role === 'superadmin') {
-      res.status(403).json({ success: false, message: 'Akun Superadmin tidak dapat dinonaktifkan.' });
+    if (target.role === 'admin' && target.id !== actor.id) {
+      res.status(403).json({ success: false, message: 'Akun Admin lain tidak dapat dinonaktifkan dari sini.' });
       return;
     }
 
-    if (actor.role === 'admin' && (!actor.organizationId || target.organization_id !== actor.organizationId)) {
-      res.status(403).json({ success: false, message: 'Anda hanya dapat mengelola akun anggota di organisasi Anda.' });
-      return;
-    }
+    // Admin mengelola akun di SELURUH project.
 
     await p.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
 
@@ -298,8 +295,8 @@ router.patch('/:id/status', requireRole('admin', 'superadmin'), async (req: Requ
   }
 });
 
-// 7. Reset a member's password (admin & superadmin only, old password not required)
-router.patch('/:id/reset-password', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+// 7. Reset a member's password (admin only, old password not required)
+router.patch('/:id/reset-password', requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const actor = req.authUser!;
@@ -330,15 +327,12 @@ router.patch('/:id/reset-password', requireRole('admin', 'superadmin'), async (r
 
     const target = rows[0];
 
-    if (target.role === 'superadmin') {
-      res.status(403).json({ success: false, message: 'Kata sandi akun Superadmin tidak dapat direset dari sini.' });
+    if (target.role === 'admin') {
+      res.status(403).json({ success: false, message: 'Kata sandi akun Admin lain tidak dapat direset dari sini.' });
       return;
     }
 
-    if (actor.role === 'admin' && (!actor.organizationId || target.organization_id !== actor.organizationId)) {
-      res.status(403).json({ success: false, message: 'Anda hanya dapat mengelola akun anggota di organisasi Anda.' });
-      return;
-    }
+    // Admin mengelola akun di SELURUH project.
 
     const newHash = await bcrypt.hash(String(newPassword), 10);
     await p.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, id]);
@@ -363,8 +357,8 @@ router.patch('/:id/reset-password', requireRole('admin', 'superadmin'), async (r
   }
 });
 
-// 8. Delete a user account permanently - admin & superadmin only
-router.delete('/:id', requireRole('admin', 'superadmin'), async (req: Request, res: Response): Promise<void> => {
+// 8. Delete a user account permanently - admin only
+router.delete('/:id', requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const actor = req.authUser!;
@@ -389,15 +383,12 @@ router.delete('/:id', requireRole('admin', 'superadmin'), async (req: Request, r
 
     const target = rows[0];
 
-    if (target.role === 'superadmin') {
-      res.status(403).json({ success: false, message: 'Akun Superadmin tidak dapat dihapus.' });
+    if (target.role === 'admin') {
+      res.status(403).json({ success: false, message: 'Akun Admin tidak dapat dihapus.' });
       return;
     }
 
-    if (actor.role === 'admin' && (!actor.organizationId || target.organization_id !== actor.organizationId)) {
-      res.status(403).json({ success: false, message: 'Anda hanya dapat mengelola akun anggota di organisasi Anda.' });
-      return;
-    }
+    // Admin mengelola akun di SELURUH project.
 
     // Clean up related rows first (no FK constraints to users, keep data consistent)
     await p.query('DELETE FROM join_requests WHERE user_id = ?', [id]);

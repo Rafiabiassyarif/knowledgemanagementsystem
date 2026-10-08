@@ -43,7 +43,7 @@ export const OrganizationsPage: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const navigate = useNavigate();
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = currentUser?.role === 'admin';
 
   const orgTypes = [
     'All Types',

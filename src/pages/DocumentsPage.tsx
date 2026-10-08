@@ -398,8 +398,8 @@ export const DocumentsPage: React.FC = () => {
             <span>Filter:</span>
           </div>
 
-          {/* Org Filter for Superadmin */}
-          {currentUser?.role === 'superadmin' && (
+          {/* Org Filter untuk Admin */}
+          {currentUser?.role === 'admin' && (
             <select
               value={selectedOrgFilter}
               onChange={(e) => setSelectedOrgFilter(e.target.value)}

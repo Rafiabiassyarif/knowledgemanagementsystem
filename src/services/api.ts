@@ -144,11 +144,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(credentials),
       }),
-    superadminLogin: (credentials: { email: string; password: string }) =>
-      request<{ success: boolean; token: string; user: any; message?: string }>('/auth/superadmin-login', {
-        method: 'POST',
-        body: JSON.stringify(credentials),
-      }),
     register: (userData: any) =>
       request<{ success: boolean; token: string; user: any; requiresOrgJoin: boolean; message: string }>('/auth/register', {
         method: 'POST',

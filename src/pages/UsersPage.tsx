@@ -56,8 +56,8 @@ export const UsersPage: React.FC = () => {
   // Edit user form state
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editRole, setEditRole] = useState<'user' | 'admin' | 'superadmin'>('user');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'superadmin' | 'admin' | 'user'>('all');
+  const [editRole, setEditRole] = useState<'admin' | 'user'>('user');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
   const [orgFilter, setOrgFilter] = useState<string>('all');
 
   const showToast = (message: string) => {
@@ -74,9 +74,8 @@ export const UsersPage: React.FC = () => {
     }
   };
 
-  // Filter users based on scope:
-  // Superadmin sees all users; Admin sees users in their organization
-  const targetUsers = currentUser?.role === 'superadmin' 
+  // Admin mengelola SEMUA pengguna; user hanya melihat rekan satu project.
+  const targetUsers = currentUser?.role === 'admin' 
     ? users 
     : users.filter(u => u.organizationId === currentUser?.organizationId);
 
@@ -108,7 +107,7 @@ export const UsersPage: React.FC = () => {
     if (!newName.trim() || !newEmail.trim()) return;
 
     const targetOrg = organizations.find(o => 
-      o.id === (currentUser?.role === 'superadmin' ? newOrgId : currentUser?.organizationId)
+      o.id === (currentUser?.role === 'admin' ? newOrgId : currentUser?.organizationId)
     );
 
     addUser({
@@ -143,7 +142,7 @@ export const UsersPage: React.FC = () => {
       email: editEmail.trim()
     });
 
-    if (currentUser?.role === 'superadmin' && editRole !== editingUser.role) {
+    if (currentUser?.role === 'admin' && editRole !== editingUser.role) {
       updateUserRole(editingUser.id, editRole);
       if (editRole === 'admin') {
         showToast(`${editName} berhasil diangkat sebagai Admin!`);
@@ -204,7 +203,6 @@ export const UsersPage: React.FC = () => {
   const totalCount = targetUsers.length;
   const adminCount = targetUsers.filter(u => u.role === 'admin').length;
   const regularUserCount = targetUsers.filter(u => u.role === 'user').length;
-  const superadminCount = targetUsers.filter(u => u.role === 'superadmin').length;
 
   return (
     <div className="space-y-6">
@@ -212,10 +210,10 @@ export const UsersPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {currentUser?.role === 'superadmin' ? 'Kelola Pengguna & Hak Akses' : 'Manajemen Pengguna Platform'}
+            {currentUser?.role === 'admin' ? 'Kelola Pengguna & Hak Akses' : 'Manajemen Pengguna Platform'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {currentUser?.role === 'superadmin'
+            {currentUser?.role === 'admin'
               ? 'Kelola akun seluruh personil, promosi hak akses, dan manajemen akun platform.'
               : 'Kelola data akun pengguna, peran, dan hak akses.'}
           </p>
@@ -277,15 +275,15 @@ export const UsersPage: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1.5">
             <span className="text-xs font-medium">
-              {currentUser?.role === 'superadmin' ? 'Cakupan BUMD' : 'Status Pengguna'}
+              {currentUser?.role === 'admin' ? 'Cakupan BUMD' : 'Status Pengguna'}
             </span>
             <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
-            {currentUser?.role === 'superadmin' ? organizations.length : '100%'}
+            {currentUser?.role === 'admin' ? organizations.length : '100%'}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {currentUser?.role === 'superadmin' ? 'Entitas organisasi aktif' : 'Terverifikasi & aktif'}
+            {currentUser?.role === 'admin' ? 'Entitas organisasi aktif' : 'Terverifikasi & aktif'}
           </p>
         </div>
       </div>
@@ -314,8 +312,8 @@ export const UsersPage: React.FC = () => {
             )}
           </div>
 
-          {/* Org Filter (for Superadmin) */}
-          {currentUser?.role === 'superadmin' && (
+          {/* Filter Organisasi */}
+          {currentUser?.role === 'admin' && (
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">BUMD:</span>
               <select
@@ -337,7 +335,6 @@ export const UsersPage: React.FC = () => {
           <div className="flex items-center gap-1.5">
             {[
               { id: 'all' as const, label: 'Semua', count: totalCount },
-              ...(currentUser?.role === 'superadmin' ? [{ id: 'superadmin' as const, label: 'Superadmin', count: superadminCount }] : []),
               { id: 'admin' as const, label: 'Admin', count: adminCount },
               { id: 'user' as const, label: 'User', count: regularUserCount },
             ].map(tab => (
@@ -376,7 +373,7 @@ export const UsersPage: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/70 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Pengguna</th>
-                {currentUser?.role === 'superadmin' && (
+                {currentUser?.role === 'admin' && (
                   <th className="py-3.5 px-4">Organisasi</th>
                 )}
                 <th className="py-3.5 px-4">Peran</th>
@@ -388,16 +385,14 @@ export const UsersPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
               {filteredUsers.map((user) => {
                 const isSelf = user.id === currentUser?.id;
-                const isSuperadminUser = user.role === 'superadmin';
-                const canDelete = !isSelf && !isSuperadminUser && (Boolean(user.organizationId) || currentUser?.role === 'superadmin');
-                const canManageAccount = !isSelf && !isSuperadminUser;
-                const resolvedOrgName = user.organizationName || organizations.find(o => o.id === user.organizationId)?.name || (user.role === 'superadmin' ? 'Platform Global' : 'Belum Bergabung');
+                const isAdminUser = user.role === 'admin';
+                const canDelete = !isSelf && !isAdminUser && (Boolean(user.organizationId) || currentUser?.role === 'admin');
+                const canManageAccount = !isSelf && !isAdminUser;
+                const resolvedOrgName = user.organizationName || organizations.find(o => o.id === user.organizationId)?.name || 'Belum Bergabung';
 
                 // Avatar color accent
-                const avatarBg = user.role === 'superadmin'
-                  ? 'bg-linear-to-br from-purple-600 to-indigo-600 text-white'
-                  : user.role === 'admin'
-                  ? 'bg-linear-to-br from-blue-600 to-indigo-600 text-white'
+                const avatarBg = user.role === 'admin'
+                  ? 'bg-linear-to-br from-indigo-600 to-blue-600 text-white'
                   : 'bg-linear-to-br from-slate-700 to-slate-800 text-white';
 
                 return (
@@ -422,8 +417,8 @@ export const UsersPage: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* Organization (Superadmin view) */}
-                    {currentUser?.role === 'superadmin' && (
+                    {/* Organization */}
+                    {currentUser?.role === 'admin' && (
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
                           <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -436,12 +431,7 @@ export const UsersPage: React.FC = () => {
 
                     {/* Role */}
                     <td className="py-3.5 px-4">
-                      {user.role === 'superadmin' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800">
-                          <ShieldCheck className="w-3 h-3" />
-                          Superadmin
-                        </span>
-                      ) : user.role === 'admin' ? (
+                      {user.role === 'admin' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800">
                           <ShieldCheck className="w-3 h-3" />
                           Admin
@@ -482,8 +472,8 @@ export const UsersPage: React.FC = () => {
                     {/* Single-Row Clean Actions */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                        {/* Superadmin direct promote/demote action */}
-                        {currentUser?.role === 'superadmin' && !isSelf && !isSuperadminUser && (
+                        {/* Aksi promosi / demosi Admin */}
+                        {currentUser?.role === 'admin' && !isSelf && !isAdminUser && (
                           user.role === 'user' ? (
                             <button
                               type="button"
@@ -584,7 +574,7 @@ export const UsersPage: React.FC = () => {
 
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={currentUser?.role === 'superadmin' ? 7 : 6} className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
+                  <td colSpan={currentUser?.role === 'admin' ? 7 : 6} className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <Users className="w-8 h-8 text-slate-300 dark:text-slate-600" />
                       <p className="font-semibold text-slate-700 dark:text-slate-300">Tidak ada anggota yang cocok</p>
@@ -643,7 +633,7 @@ export const UsersPage: React.FC = () => {
             />
           </div>
 
-          {currentUser?.role === 'superadmin' && (
+          {currentUser?.role === 'admin' && (
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Pilih Organisasi *</label>
               <select
@@ -709,8 +699,8 @@ export const UsersPage: React.FC = () => {
             />
           </div>
 
-          {/* Role selector for Superadmin */}
-          {currentUser?.role === 'superadmin' && editingUser?.role !== 'superadmin' && (
+          {/* Role selector untuk Admin */}
+          {currentUser?.role === 'admin' && editingUser?.role !== 'admin' && (
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Peran / Hak Akses (Role)</label>
               <select

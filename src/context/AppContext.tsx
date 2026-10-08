@@ -44,7 +44,6 @@ interface AppContextType {
 
   // Auth & Registration actions
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string; user?: User }>;
-  superadminLogin: (email: string, password: string) => Promise<{ success: boolean; message?: string; user?: User }>;
   registerUser: (data: {
     name: string;
     email: string;
@@ -347,15 +346,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // STRICT ISOLATION: A document must strictly belong to the currently active project
     let base = documents.filter(doc => doc.organizationId && doc.organizationId.trim() === targetId.trim());
 
-    // Superadmin in global view (without active project) can see all documents
-    if (currentUser.role === 'superadmin' && !activeProjectId) {
+    // Admin melihat SEMUA dokumen lintas project.
+    if (currentUser.role === 'admin') {
       base = documents;
     }
 
     // Role-based visibility within the project:
     // User biasa TIDAK BISA melihat dokumen yang di-upload oleh Admin.
     // User biasa hanya melihat dokumen unggahan user atau unggahan miliknya sendiri.
-    // Admin & Superadmin dapat melihat SEMUA dokumen (baik unggahan admin maupun user).
+    // Admin dapat melihat SEMUA dokumen (baik unggahan admin maupun user).
     if (currentUser.role === 'user') {
       base = base.filter(doc => (doc.uploaderRole === 'user' || !doc.uploaderRole || doc.uploadedById === currentUser.id));
     }
@@ -369,13 +368,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentOrganization) return [];
     const targetId = currentOrganization.id;
 
-    if (currentUser.role === 'superadmin' && !activeProjectId) {
+    if (currentUser.role === 'admin') {
       return chunks;
     }
     return chunks.filter(c => c.organizationId && c.organizationId.trim() === targetId.trim());
   }, [currentUser, activeProjectId, currentOrganization, chunks]);
 
-  // General login for all roles (Superadmin, Admin, User)
+  // Login umum untuk semua peran (Admin, User)
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {
     const cleanEmail = email.trim().toLowerCase();
 
@@ -417,43 +416,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actorName: backendUser.name,
         actorRole: backendUser.role,
         action: 'Masuk ke Platform KMS',
-        target: backendUser.role === 'superadmin' ? 'Portal Superadmin' : 'Sesi Web User',
+        target: backendUser.role === 'admin' ? 'Konsol Admin' : 'Sesi Web User',
         timestamp: 'Baru saja',
         type: 'user'
       };
       setActivityLogs(prev => [log, ...prev]);
-
-      // Session is now valid: pull fresh protected data for the app shell.
-      refreshBackendData();
-
-      return { success: true, user: backendUser };
-    } catch (err: any) {
-      return { success: false, message: err.message || 'Gagal terhubung ke server autentikasi.' };
-    }
-  };
-
-  // Dedicated Superadmin Login (password-validated against backend)
-  const superadminLogin = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {
-    if (!password) {
-      return { success: false, message: 'Kata sandi wajib diisi.' };
-    }
-
-    try {
-      const res = await api.auth.superadminLogin({ email: email.trim().toLowerCase(), password });
-      if (!res.success || !res.user) {
-        return { success: false, message: res.message || 'Kredensial Superadmin tidak valid.' };
-      }
-
-      tokenStore.set(res.token);
-      const backendUser = res.user as User;
-
-      setCurrentUser(backendUser);
-      setUsers(prev => {
-        if (prev.some(u => u.id === backendUser.id)) {
-          return prev.map(u => u.id === backendUser.id ? backendUser : u);
-        }
-        return [...prev, backendUser];
-      });
 
       // Session is now valid: pull fresh protected data for the app shell.
       refreshBackendData();
@@ -734,9 +701,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Proyek tidak ditemukan.' };
     }
 
-    // Permission: Admin, Superadmin, or User
+    // Permission: Admin atau User
     const isOwner = currentUser?.organizationId === orgId || targetOrg.adminId === currentUser?.id;
-    const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'user' || isOwner;
+    const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'user' || isOwner;
 
     if (!isAuthorized) {
       return { success: false, message: 'Anda tidak memiliki hak akses untuk menghapus proyek ini.' };
@@ -1063,8 +1030,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add User
   const addUser = (userData: Omit<User, 'id' | 'joinedAt' | 'avatarInitials'>) => {
-    // Only superadmin can assign 'admin' or 'superadmin' roles; admins can only add regular users
-    const effectiveRole: UserRole = (currentUser?.role === 'superadmin')
+    // Hanya admin yang boleh memberi peran admin; akun baru default sebagai user
+    const effectiveRole: UserRole = (currentUser?.role === 'admin')
       ? userData.role
       : 'user';
 
@@ -1194,11 +1161,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs(prev => [newLog, ...prev]);
   };
 
-  // Update User Role (Superadmin promotes User to Admin or demotes Admin to User)
+  // Update User Role (Admin promotes User to Admin atau menurunkan Admin ke User)
   const updateUserRole = (userId: string, newRole: UserRole) => {
-    // Permission check: only superadmin can promote or demote admin roles
-    if (currentUser?.role !== 'superadmin') {
-      console.warn('Wewenang ditolak: Hanya Superadmin yang berhak mengubah role User/Admin.');
+    // Hanya admin yang boleh mengubah peran pengguna
+    if (currentUser?.role !== 'admin') {
+      console.warn('Wewenang ditolak: hanya Admin yang berhak mengubah peran User/Admin.');
       return;
     }
 
@@ -1232,8 +1199,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `act-${Date.now()}`,
       organizationId: targetUser?.organizationId || null,
       organizationName: targetUser?.organizationName || null,
-      actorName: currentUser ? currentUser.name : 'Superadmin',
-      actorRole: 'superadmin',
+      actorName: currentUser ? currentUser.name : 'Admin',
+      actorRole: 'admin',
       action: newRole === 'admin'
         ? 'Promosi Menjadi Admin Organisasi'
         : 'Penyesuaian Hak Akses Menjadi Anggota / User',
@@ -1244,18 +1211,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs(prev => [log, ...prev]);
   };
 
-  // Set user account status (suspend / re-activate) - admin & superadmin only
+  // Set user account status (suspend / re-activate) - admin only
   const setUserStatus = (userId: string, status: 'active' | 'inactive') => {
-    if (currentUser?.role !== 'superadmin' && currentUser?.role !== 'admin') {
-      console.warn('Wewenang ditolak: Hanya Admin/Superadmin yang dapat mengubah status akun.');
+    if (currentUser?.role !== 'admin') {
+      console.warn('Wewenang ditolak: hanya Admin yang dapat mengubah status akun.');
       return;
     }
 
     const targetUser = users.find(u => u.id === userId);
     if (!targetUser) return;
 
-    // Safety guards: never suspend own account or a superadmin account
-    if (targetUser.id === currentUser.id || targetUser.role === 'superadmin') return;
+    // Pengaman: akun sendiri maupun akun Admin lain tidak boleh dinonaktifkan
+    if (targetUser.id === currentUser.id || targetUser.role === 'admin') return;
     if (currentUser.role === 'admin' && targetUser.organizationId !== currentUser.organizationId) return;
 
     setUsers(prev => prev.map(u => (u.id === userId ? { ...u, status } : u)));
@@ -1279,7 +1246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Reset a member's password (admin sets a new temporary password)
   const resetUserPassword = async (userId: string, newPassword: string): Promise<boolean> => {
-    if (currentUser?.role !== 'superadmin' && currentUser?.role !== 'admin') return false;
+    if (currentUser?.role !== 'admin') return false;
 
     const targetUser = users.find(u => u.id === userId);
 
@@ -1307,18 +1274,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Delete a user account permanently (admin & superadmin only)
+  // Delete a user account permanently (admin only)
   const deleteUser = (userId: string) => {
-    if (currentUser?.role !== 'superadmin' && currentUser?.role !== 'admin') {
-      console.warn('Wewenang ditolak: Hanya Admin/Superadmin yang dapat menghapus akun.');
+    if (currentUser?.role !== 'admin') {
+      console.warn('Wewenang ditolak: hanya Admin yang dapat menghapus akun.');
       return;
     }
 
     const targetUser = users.find(u => u.id === userId);
     if (!targetUser) return;
 
-    // Safety guards: never delete own account or a superadmin account
-    if (targetUser.id === currentUser.id || targetUser.role === 'superadmin') return;
+    // Pengaman: akun sendiri maupun akun Admin lain tidak boleh dihapus
+    if (targetUser.id === currentUser.id || targetUser.role === 'admin') return;
     if (currentUser.role === 'admin' && targetUser.organizationId !== currentUser.organizationId) return;
 
     // Optimistic UI update, then persist to MySQL backend
@@ -1485,7 +1452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Send Chat Message with Context-Aware RAG Retrieval
   const sendChatMessage = async (question: string, overrideOrgId?: string) => {
-    const targetOrgId = overrideOrgId || currentOrganization?.id || (currentUser?.role !== 'superadmin' ? currentUser?.organizationId : null);
+    const targetOrgId = overrideOrgId || currentOrganization?.id || (currentUser?.role !== 'admin' ? currentUser?.organizationId : null);
     const orgIdKey = targetOrgId || 'global';
 
     const userMsgId = `msg-u-${Date.now()}`;
@@ -1581,7 +1548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearChatHistory = (targetOrgId?: string) => {
-    const orgIdKey = targetOrgId || currentOrganization?.id || (currentUser?.role !== 'superadmin' ? currentUser?.organizationId : null) || 'global';
+    const orgIdKey = targetOrgId || currentOrganization?.id || (currentUser?.role !== 'admin' ? currentUser?.organizationId : null) || 'global';
     const targetOrg = organizations.find(o => o.id === orgIdKey);
     const orgName = targetOrg?.name || 'organisasi ini';
 
@@ -1600,7 +1567,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearActivityLogs = () => {
     setActivityLogs([]);
     localStorage.setItem('kms_logs_store', JSON.stringify([]));
-    api.activities.clear(currentUser?.role === 'superadmin' ? undefined : (currentUser?.organizationId || undefined))
+    api.activities.clear(currentUser?.role === 'admin' ? undefined : (currentUser?.organizationId || undefined))
       .catch(e => console.error('[BACKEND CLEAR LOGS ERROR]', e));
   };
 
@@ -1631,7 +1598,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       accessibleDocuments,
       accessibleChunks,
       login,
-      superadminLogin,
       registerUser,
       logout,
       joinOrganization,

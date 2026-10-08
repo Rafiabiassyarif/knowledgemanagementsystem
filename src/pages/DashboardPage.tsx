@@ -118,8 +118,8 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Buttons — hanya untuk admin/superadmin (halaman user tanpa tombol ini) */}
-        {(currentUser?.role === 'admin' || currentUser?.role === 'superadmin') && (
+        {/* Action Buttons — hanya untuk admin (halaman user tanpa tombol ini) */}
+        {(currentUser?.role === 'admin') && (
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               type="button"

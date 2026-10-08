@@ -20,6 +20,11 @@ export const AppLayout: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
+  // Admin memakai konsol pengelolaan tersendiri, bukan portal pengguna.
+  if (currentUser.role === 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
+
   return (
     <div className="h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex overflow-hidden antialiased transition-colors duration-200">
       {/* Desktop Sidebar (Permanent >= 1024px) */}
@@ -73,7 +78,7 @@ export const AppLayout: React.FC = () => {
 
       {/* Onboarding opsional untuk akun baru yang belum memiliki project sama sekali */}
       <CreateProjectModal
-        isOpen={!dismissOnboarding && organizations.length === 0 && currentUser.role !== 'superadmin'}
+        isOpen={!dismissOnboarding && organizations.length === 0}
         isMandatoryOnboarding={true}
         onClose={() => setDismissOnboarding(true)}
       />

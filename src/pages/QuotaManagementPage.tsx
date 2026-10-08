@@ -47,7 +47,7 @@ export interface UserQuotaItem {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'user' | 'superadmin';
+  role: 'admin' | 'user';
   organizationName: string;
   department: string;
   planKey: string;
@@ -919,7 +919,7 @@ export const QuotaManagementPage: React.FC = () => {
                   ) : (
                     filteredUsers.map((u) => {
                       const targetPkg = packages.find(p => p.key === u.planKey);
-                      const isUnlimited = targetPkg?.isUnlimited || u.docQuota >= 999999 || u.role === 'admin' || u.role === 'superadmin';
+                      const isUnlimited = targetPkg?.isUnlimited || u.docQuota >= 999999 || u.role === 'admin';
                       const maxQ = isUnlimited ? 999999 : (u.docQuota || targetPkg?.docQuota || 5);
                       const isFull = !isUnlimited && u.docCount >= maxQ;
 
@@ -945,7 +945,7 @@ export const QuotaManagementPage: React.FC = () => {
                           </td>
 
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.role === 'admin' || u.role === 'superadmin'
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.role === 'admin'
                                 ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
                                 : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                               }`}>

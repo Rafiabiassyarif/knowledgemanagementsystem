@@ -6,7 +6,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { OrganizationsPage } from './pages/OrganizationsPage';
 import { OrganizationDetailPage } from './pages/OrganizationDetailPage';
 import { DocumentsPage } from './pages/DocumentsPage';
-import { KnowledgePage } from './pages/KnowledgePage';
 import { UsersPage } from './pages/UsersPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -14,8 +13,9 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { JoinOrgPage } from './pages/JoinOrgPage';
 import { LandingPage } from './pages/LandingPage';
+import { AdminLayout } from './components/layout/AdminLayout';
+import { AdminDashboardPage } from './pages/AdminDashboardPage';
 // SEMBUNYI SEMENTARA: halaman manajemen paket & kuota belum dipublikasikan
 // import { QuotaManagementPage } from './pages/QuotaManagementPage';
 import { CdnMonitoringPage } from './pages/CdnMonitoringPage';
@@ -47,18 +47,23 @@ export default function App() {
             <Route path="quota" element={<Navigate to="/app" replace />} />
             <Route path="cdn" element={<CdnMonitoringPage />} />
             <Route path="users" element={<UsersPage />} />
-            <Route path="admin" element={<Navigate to="/app" replace />} />
-            <Route path="admin/quota" element={<Navigate to="/app" replace />} />
-            <Route path="admin/cdn" element={<Navigate to="/app/cdn" replace />} />
-            <Route path="admin/organizations" element={<Navigate to="/app/organizations" replace />} />
-            <Route path="admin/settings" element={<Navigate to="/app" replace />} />
             <Route path="join-org" element={<Navigate to="/app/projects" replace />} />
             <Route path="activity" element={<ActivityPage />} />
           </Route>
 
-          {/* Legacy & Superadmin redirects to unified /app */}
-          <Route path="/superadmin/*" element={<Navigate to="/app" replace />} />
-          <Route path="/superadmin" element={<Navigate to="/app" replace />} />
+          {/* Halaman khusus Admin — konsol pengelolaan seluruh project */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboardPage />} />
+            <Route path="projects" element={<OrganizationsPage />} />
+            <Route path="projects/:id" element={<OrganizationDetailPage />} />
+            <Route path="users" element={<UsersPage />} />
+            <Route path="documents" element={<DocumentsPage />} />
+            <Route path="cdn" element={<CdnMonitoringPage />} />
+            <Route path="activity" element={<ActivityPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+
+          {/* Legacy redirects to unified /app */}
           <Route path="/organizations" element={<Navigate to="/app/organizations" replace />} />
           <Route path="/organizations/:id" element={<Navigate to="/app/organizations" replace />} />
           <Route path="/chat" element={<Navigate to="/app/documents" replace />} />

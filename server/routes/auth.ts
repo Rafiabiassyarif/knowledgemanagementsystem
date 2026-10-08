@@ -84,70 +84,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 2. Superadmin Login (now with mandatory password validation)
-router.post('/superadmin-login', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      res.status(400).json({ success: false, message: 'Email dan kata sandi wajib diisi.' });
-      return;
-    }
-
-    const p = getPool();
-    const [rows] = await p.query<any[]>(
-      `SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND role = 'superadmin'`,
-      [email.trim()]
-    );
-
-    if (rows.length === 0) {
-      res.status(401).json({ success: false, message: 'Kredensial Superadmin tidak valid.' });
-      return;
-    }
-
-    const user = rows[0];
-
-    if (!user.password_hash) {
-      res.status(401).json({ success: false, message: 'Akun superadmin belum memiliki kata sandi. Hubungi pengelola sistem.' });
-      return;
-    }
-
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) {
-      res.status(401).json({ success: false, message: 'Kata sandi tidak sesuai.' });
-      return;
-    }
-
-    const token = generateToken({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: 'superadmin',
-      organizationId: null
-    });
-
-    const userRes = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: 'superadmin',
-      organizationId: null,
-      organizationName: null,
-      department: user.department || 'Platform Governance & Cloud Engineering',
-      status: 'active',
-      avatarInitials: user.avatar_initials || 'SA',
-      avatarUrl: user.avatar_url,
-      phone: user.phone,
-      joinedAt: user.created_at
-    };
-
-    res.json({ success: true, token, user: userRes });
-  } catch (err: any) {
-    console.error('[SUPERADMIN AUTH ERROR]', err);
-    res.status(500).json({ success: false, message: 'Kesalahan internal server.' });
-  }
-});
-
-// 3. Register New User
+// 2. Register New User
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password, phone, employeeId, orgCode } = req.body;
@@ -232,11 +169,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 4. Update Profile (protected: only the owner, an org admin, or superadmin)
+// 3. Update Profile (protected: hanya pemilik akun)
 router.put('/profile/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    if (req.authUser!.id !== id && req.authUser!.role !== 'superadmin') {
+    if (req.authUser!.id !== id) {
       res.status(403).json({ success: false, message: 'Anda hanya dapat mengubah profil sendiri.' });
       return;
     }
@@ -297,11 +234,11 @@ router.put('/profile/:id', requireAuth, async (req: Request, res: Response): Pro
   }
 });
 
-// 5. Change Password (protected: owner or superadmin)
+// 4. Change Password (protected: hanya pemilik akun)
 router.put('/change-password/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    if (req.authUser!.id !== id && req.authUser!.role !== 'superadmin') {
+    if (req.authUser!.id !== id) {
       res.status(403).json({ success: false, message: 'Anda hanya dapat mengubah kata sandi sendiri.' });
       return;
     }

@@ -12,7 +12,7 @@ export interface AuthUserPayload {
   id: string;
   name: string;
   email: string;
-  role: 'superadmin' | 'admin' | 'user';
+  role: 'admin' | 'user';
   organizationId?: string | null;
 }
 
@@ -54,7 +54,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       id: 'usr-developer',
       name: 'Developer API Client',
       email: 'developer@kms.local',
-      role: 'superadmin',
+      role: 'admin',
       organizationId: null
     };
     next();

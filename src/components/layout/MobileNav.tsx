@@ -11,22 +11,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
   const { currentUser } = useApp();
   const location = useLocation();
 
-  const getItems = () => {
-    if (currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
-      return [
-        { to: '/app', label: 'Overview', icon: LayoutDashboard },
-        { to: '/app/documents', label: 'Dokumen', icon: FileText },
-        { to: '/app/cdn', label: 'CDN & RAG', icon: HardDrive },
-        { to: '/app/projects', label: 'Project', icon: FolderKanban },
-      ];
-    }
-
-    return [
-      { to: '/app', label: 'Overview', icon: LayoutDashboard },
-      { to: '/app/documents', label: 'Dokumen', icon: FileText },
-      { to: '/app/projects', label: 'Project', icon: FolderKanban },
-    ];
-  };
+  // Portal /app khusus pengguna; admin memakai konsol /admin.
+  const getItems = () => [
+    { to: '/app', label: 'Overview', icon: LayoutDashboard },
+    { to: '/app/documents', label: 'Dokumen', icon: FileText },
+    { to: '/app/projects', label: 'Project', icon: FolderKanban },
+  ];
 
   const isLinkActive = (to: string) => {
     if (to === '/app') {

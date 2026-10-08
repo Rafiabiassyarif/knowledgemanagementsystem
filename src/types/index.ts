@@ -1,5 +1,5 @@
-export type UserRole = 'superadmin' | 'admin' | 'user';
-export type Role = UserRole | 'SUPERADMIN' | 'ADMIN' | 'USER';
+export type UserRole = 'admin' | 'user';
+export type Role = UserRole | 'ADMIN' | 'USER';
 
 export type MembershipStatus = 'none' | 'pending' | 'joined' | 'active';
 

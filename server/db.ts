@@ -91,7 +91,7 @@ async function createTables() {
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NULL,
-      role ENUM('superadmin', 'admin', 'user') DEFAULT 'user',
+      role ENUM('admin', 'user') DEFAULT 'user',
       organization_id VARCHAR(64) NULL,
       department VARCHAR(255) NULL,
       status ENUM('active', 'inactive', 'pending') DEFAULT 'active',
@@ -165,7 +165,7 @@ async function createTables() {
     await p.query("ALTER TABLE documents ADD COLUMN uploader_role VARCHAR(20) DEFAULT 'user' AFTER uploaded_by_id");
     console.log('[DB] Kolom uploader_role ditambahkan ke tabel documents.');
     try {
-      await p.query("UPDATE documents SET uploader_role = 'admin' WHERE uploaded_by LIKE '%Admin%' OR uploaded_by_id IN (SELECT id FROM users WHERE role IN ('admin', 'superadmin'))");
+      await p.query("UPDATE documents SET uploader_role = 'admin' WHERE uploaded_by LIKE '%Admin%' OR uploaded_by_id IN (SELECT id FROM users WHERE role IN ('admin'))");
       console.log('[DB] Dokumen admin yang sudah ada disesuaikan uploader_role = admin.');
     } catch (e) {
       console.warn('[DB] Gagal update role dokumen lama:', e);
@@ -319,32 +319,19 @@ async function seedInitialData() {
   const [orgRows] = await p.query<any[]>('SELECT id FROM organizations LIMIT 1');
   const defaultOrgId = orgRows.length > 0 ? orgRows[0].id : null;
 
-  // 1. Ensure Superadmin account always exists
-  const [superadminRows] = await p.query<any[]>('SELECT id FROM users WHERE role = ? OR email = ?', ['superadmin', 'superadmin@kms.id']);
+  // 1. Ensure Admin account always exists (admin@kms.id / password123)
   const demoHash = await bcrypt.hash(DEMO_PASSWORD, 10);
-  if (superadminRows.length === 0) {
-    console.log('[DB] Creating master Superadmin account (superadmin@kms.id)...');
-    await p.query(
-      `INSERT INTO users (id, name, email, password_hash, role, organization_id, status, avatar_initials, phone, org_join_status, plan, doc_quota)
-       VALUES ('usr-superadmin', 'Dr. Hendra Gunawan', 'superadmin@kms.id', ?, 'superadmin', NULL, 'active', 'HG', '0811-9988-7766', 'joined', 'enterprise', 9999)`,
-      [demoHash]
-    );
-  } else {
-    await p.query('UPDATE users SET password_hash = ?, organization_id = NULL, status = "active" WHERE email = "superadmin@kms.id"', [demoHash]);
-  }
-
-  // 2. Ensure Admin Dummy account exists (admin@kms.id / password123)
   const [adminRows] = await p.query<any[]>('SELECT id FROM users WHERE email = ?', ['admin@kms.id']);
   if (adminRows.length === 0) {
-    console.log('[DB] Creating dummy Admin account (admin@kms.id)...');
+    console.log('[DB] Creating master Admin account (admin@kms.id)...');
     await p.query(
       `INSERT INTO users (id, name, email, password_hash, role, organization_id, status, avatar_initials, phone, org_join_status, plan, doc_quota)
-       VALUES ('usr-admin-demo', 'Administrator BUMD', 'admin@kms.id', ?, 'admin', ?, 'active', 'AD', '0812-3456-7890', 'joined', 'enterprise', 999)`,
+       VALUES ('usr-admin-demo', 'Administrator BUMD', 'admin@kms.id', ?, 'admin', ?, 'active', 'AD', '0812-3456-7890', 'joined', 'enterprise', 9999)`,
       [demoHash, defaultOrgId]
     );
   } else {
-    // Sandi akun demo tidak ditimpa lagi, agar hasil reset sandi tidak hilang saat restart.
-    await p.query('UPDATE users SET role = "admin", status = "active", plan = "enterprise", doc_quota = 999 WHERE email = "admin@kms.id"');
+    // Sandi akun admin tidak ditimpa lagi, agar hasil reset sandi tidak hilang saat restart.
+    await p.query('UPDATE users SET role = "admin", status = "active", plan = "enterprise", doc_quota = 9999 WHERE email = "admin@kms.id"');
   }
 
   // 3. Ensure User Dummy account exists (user@kms.id / password123)

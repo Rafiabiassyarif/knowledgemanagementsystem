@@ -3,7 +3,7 @@ import { getPool } from '../db';
 
 const router = Router();
 
-// 1. Get join requests (superadmin: all, admin: their org, user: their own)
+// 1. Get join requests (admin: all, user: their own)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.query;
@@ -79,7 +79,7 @@ router.post('/join', async (req: Request, res: Response): Promise<void> => {
     }
     const user = userRows[0];
 
-    // Admins and superadmins join directly; regular users go through pending approval
+    // Admin join langsung; user biasa melalui persetujuan
     if (user.role !== 'user') {
       await p.query(
         'UPDATE users SET organization_id = ?, org_join_status = "joined" WHERE id = ?',
@@ -136,7 +136,7 @@ router.post('/join', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 3. Approve join request (admin of that org or superadmin)
+// 3. Approve join request (admin)
 router.post('/:id/approve', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -180,7 +180,7 @@ router.post('/:id/approve', async (req: Request, res: Response): Promise<void> =
   }
 });
 
-// 4. Reject join request (admin of that org or superadmin)
+// 4. Reject join request (admin)
 router.post('/:id/reject', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -230,7 +230,7 @@ router.post('/leave', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ success: false, message: 'User ID wajib disertakan.' });
       return;
     }
-    if (authUser && authUser.id !== userId && authUser.role !== 'superadmin') {
+    if (authUser && authUser.id !== userId && authUser.role !== 'admin') {
       res.status(403).json({ success: false, message: 'Anda hanya dapat mengeluarkan diri sendiri.' });
       return;
     }

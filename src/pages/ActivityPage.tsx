@@ -48,7 +48,7 @@ export const ActivityPage: React.FC = () => {
     showToast(`Catatan "${actionName}" telah dihapus.`);
   };
 
-  const displayLogs = currentUser?.role === 'superadmin'
+  const displayLogs = currentUser?.role === 'admin'
     ? activityLogs
     : activityLogs.filter(l => l.organizationId === currentUser?.organizationId || !l.organizationId);
 
@@ -94,7 +94,7 @@ export const ActivityPage: React.FC = () => {
             Audit Trail & Log Aktivitas
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {currentUser?.role === 'superadmin'
+            {currentUser?.role === 'admin'
               ? 'Pencatatan real-time interaksi berkas, kueri RAG, dan perubahan hak akses lintas project.'
               : `Log aktivitas internal untuk repositori dokumen & kueri AI project ${currentOrganization?.name || ''}.`}
           </p>

@@ -104,19 +104,6 @@ export const initialOrganizations: Organization[] = [
 ];
 
 export const initialUsers: User[] = [
-  // Superadmin
-  {
-    id: 'user-super-rafi',
-    name: 'Rafi Abias Syarif',
-    email: 'rafi.superadmin@kms.gov.id',
-    role: 'superadmin',
-    organizationId: null,
-    organizationName: 'KMS Platform Superadmin',
-    department: 'Platform Governance & Cloud Engineering',
-    status: 'active',
-    joinedAt: '2023-11-01',
-    avatarInitials: 'RS'
-  },
   // PAM Jaya Admin & Users
   {
     id: 'user-andi-pam',

@@ -51,7 +51,7 @@ export const SettingsPage: React.FC = () => {
           Pengaturan Sistem & RAG Pipeline
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-          {currentUser?.role === 'superadmin'
+          {currentUser?.role === 'admin'
             ? 'Konfigurasi global parameter chunking vektor, model embedding, dan batasan retrieval RAG.'
             : `Pengaturan integrasi knowledge & preferensi untuk ${currentOrganization?.name || 'Organisasi'}.`}
         </p>

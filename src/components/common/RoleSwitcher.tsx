@@ -14,8 +14,8 @@ export const RoleSwitcher: React.FC = () => {
       title: 'Admin · Administrator KMS',
       sub: 'Kelola Pengguna, Monitoring Sistem & Organisasi',
       // SEMBUNYI SEMENTARA: arahkan ke dashboard selama menu paket/kuota disembunyikan
-      path: '/app',
-      user: users.find(u => u.role === 'admin' || u.role === 'superadmin')
+      path: '/admin',
+      user: users.find(u => u.role === 'admin')
     },
     {
       role: 'user' as const,
@@ -28,12 +28,12 @@ export const RoleSwitcher: React.FC = () => {
 
   const currentPreset = presets.find(p => {
     if (!currentUser) return false;
-    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') return p.role === 'admin';
+    if (currentUser.role === 'admin') return p.role === 'admin';
     return p.role === 'user';
   }) || presets[1];
 
   const getRoleIcon = (role: string) => {
-    if (role === 'admin' || role === 'superadmin') return <Shield className="w-3.5 h-3.5 text-blue-600" />;
+    if (role === 'admin') return <Shield className="w-3.5 h-3.5 text-blue-600" />;
     return <User className="w-3.5 h-3.5 text-slate-600" />;
   };
 
@@ -67,7 +67,7 @@ export const RoleSwitcher: React.FC = () => {
               {presets.map((preset, index) => {
                 const isSelected = Boolean(
                   currentUser && (
-                    ((currentUser.role === 'admin' || currentUser.role === 'superadmin') && preset.role === 'admin') ||
+                    ((currentUser.role === 'admin') && preset.role === 'admin') ||
                     (currentUser.role === 'user' && preset.role === 'user')
                   )
                 );

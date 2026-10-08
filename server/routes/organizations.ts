@@ -7,7 +7,7 @@ import { deleteFromKroomboxCDN } from '../services/cdn';
 
 const router = Router();
 
-// 1. Get all organizations with calculated stats (filtered per user unless superadmin)
+// 1. Get all organizations with calculated stats (admin: semua project, user: miliknya)
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const p = getPool();
@@ -27,9 +27,10 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     const params: any[] = [];
 
     // User isolation:
-    // Superadmin dapat melihat SEMUA project untuk keperluan pengawasan sistem.
-    // User biasa & Admin HANYA melihat project milik mereka sendiri (yang mereka buat atau tempat mereka bergabung).
-    if (user && user.role !== 'superadmin') {
+    // Admin dapat melihat & mengelola SEMUA project.
+    // User biasa HANYA melihat project milik mereka sendiri (yang mereka buat atau tempat mereka bergabung).
+    // Admin mengelola SEMUA project; user biasa hanya project miliknya sendiri.
+    if (user && user.role !== 'admin') {
       query += `
         WHERE (
           o.created_by = ? 
@@ -104,8 +105,8 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
 
     const r = rows[0];
 
-    // Access check: User/Admin can only access their own project
-    if (user && user.role !== 'superadmin') {
+    // Access check: admin boleh akses semua project; user hanya project sendiri
+    if (user && user.role !== 'admin') {
       const isOwnerOrMember = (r.created_by === user.id) || (r.admin_name === user.name) || (user.organizationId === r.id);
       if (!isOwnerOrMember) {
         res.status(403).json({ success: false, message: 'Anda tidak memiliki hak akses ke proyek ini.' });
@@ -302,8 +303,8 @@ router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    if (user && user.role !== 'superadmin') {
-      const isOwner = (existing[0].created_by === user.id) || (existing[0].admin_name === user.name) || (user.organizationId === id) || (user.role === 'admin');
+    if (user && user.role !== 'admin') {
+      const isOwner = (existing[0].created_by === user.id) || (existing[0].admin_name === user.name) || (user.organizationId === id);
       if (!isOwner) {
         res.status(403).json({ success: false, message: 'Anda tidak memiliki hak untuk mengubah proyek ini.' });
         return;
@@ -360,9 +361,9 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
       return;
     }
 
-    // Verify ownership: superadmin, project creator, admin, or project member
-    if (user && user.role !== 'superadmin') {
-      const isOwner = (rows[0].created_by === user.id) || (rows[0].admin_name === user.name) || (user.organizationId === id) || (user.role === 'admin');
+    // Verify ownership: admin (semua), project creator, atau project member
+    if (user && user.role !== 'admin') {
+      const isOwner = (rows[0].created_by === user.id) || (rows[0].admin_name === user.name) || (user.organizationId === id);
       if (!isOwner) {
         res.status(403).json({ success: false, message: 'Anda tidak memiliki wewenang untuk menghapus proyek ini.' });
         return;

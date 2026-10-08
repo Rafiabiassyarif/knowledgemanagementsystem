@@ -118,8 +118,8 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
         uploadedById: r.uploaded_by_id,
         uploaderRole: r.uploader_role || 'user',
         uploadedAt: r.created_at,
-        chunksCount: Math.max(3, Math.round(r.file_size_kb / 400)),
-        totalTokens: Math.max(500, Math.round(r.file_size_kb * 1.8)),
+        chunksCount: Number(r.chunks_count) || 0,
+        totalTokens: Number(r.total_tokens) || Math.max(500, Math.round(r.file_size_kb * 1.8)),
         ragStatus: 'indexed'
       };
     });
@@ -238,7 +238,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
       notes: r.notes,
       uploadedBy: r.uploaded_by,
       uploadedAt: r.created_at,
-      chunksCount: Math.max(3, Math.round(r.file_size_kb / 400))
+      chunksCount: Number(r.chunks_count) || 0
     };
 
     res.json({ success: true, document: doc });
@@ -542,7 +542,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       notes,
       uploadedBy: uploadedBy || 'Admin BUMD',
       uploadedAt: new Date().toISOString(),
-      chunksCount: Math.max(3, Math.round(fileSizeKb / 400)),
+      chunksCount: 0,
       ragStatus: 'indexed'
     };
 

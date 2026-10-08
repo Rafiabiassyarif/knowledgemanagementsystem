@@ -91,6 +91,7 @@ export async function reconcileRagDeletions(orgId?: string, force: boolean = fal
         // Himpunan ID dan Nama dokumen yang MASIH AKTIF di RAG
         const activeRagIds = new Set<string>();
         const activeRagNames = new Set<string>();
+        const ragChunksByName = new Map<string, number>();
 
         for (const rd of ragDocuments) {
           if (rd.document_id) {
@@ -101,6 +102,7 @@ export async function reconcileRagDeletions(orgId?: string, force: boolean = fal
             activeRagNames.add(rawName);
             // Simpan juga versi tanpa ekstensi .txt / .pdf
             activeRagNames.add(rawName.replace(/\.[a-z0-9]+$/i, ''));
+            ragChunksByName.set(rawName, Number(rd.chunks) || 0);
           }
         }
 
@@ -130,6 +132,15 @@ export async function reconcileRagDeletions(orgId?: string, force: boolean = fal
             (fileNameLower && activeRagNames.has(fileNameLower)) ||
             (baseFileNameLower && activeRagNames.has(baseFileNameLower)) ||
             (titleLower && activeRagNames.has(titleLower));
+
+          // Selalu selaraskan jumlah chunk dengan angka asli dari RAG (hanya UPDATE, tidak menghapus).
+          const matchedName = [fileNameLower, baseFileNameLower, titleLower].find(
+            (n) => n && ragChunksByName.has(n)
+          );
+          if (matchedName) {
+            const realChunks = ragChunksByName.get(matchedName) || 0;
+            await p.query('UPDATE documents SET chunks_count = ? WHERE id = ? AND (chunks_count IS NULL OR chunks_count != ?)', [realChunks, doc.id, realChunks]);
+          }
 
           // Jika dokumen tidak ditemukan di RAG, dokumen mungkin sudah dihapus di
           // https://rag.aiones.app/. Penghapusan HANYA dijalankan bila allowDelete=true

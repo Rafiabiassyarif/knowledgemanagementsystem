@@ -25,9 +25,11 @@ import {
   FileCheck,
   ExternalLink,
   Edit3,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from 'lucide-react';
 import { EditDocumentModal } from '../components/common/EditDocumentModal';
+import { DocumentLogsModal } from '../components/common/DocumentLogsModal';
 import { DocumentItem } from '../types';
 
 export const DocumentsPage: React.FC = () => {
@@ -44,9 +46,10 @@ export const DocumentsPage: React.FC = () => {
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [selectedDocForLogs, setSelectedDocForLogs] = useState<DocumentItem | null>(null);
   const [isSyncingRag, setIsSyncingRag] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [selectedRepoTab, setSelectedRepoTab] = useState<'all' | 'document' | 'photo' | 'knowledge'>('all');
+  const [selectedRepoTab, setSelectedRepoTab] = useState<'all' | 'document' | 'photo'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -59,9 +62,10 @@ export const DocumentsPage: React.FC = () => {
     (d.repositoryType || '').toLowerCase() === 'photo' || 
     ['png', 'jpg', 'jpeg', 'webp', 'image'].includes((d.fileType || '').toLowerCase())
   ).length;
-  const countKnowledge = accessibleDocuments.filter(d => d.repositoryType === 'knowledge').length;
   const totalChunks = accessibleDocuments.reduce((acc, d) => acc + (d.chunksCount || 0), 0);
   const totalStorageMb = Math.round(accessibleDocuments.reduce((acc, d) => acc + (d.fileSizeKb || 0), 0) / 1024 * 10) / 10;
+  const totalViews = accessibleDocuments.reduce((acc, d) => acc + (d.viewCount || 0), 0);
+  const totalAiUsage = accessibleDocuments.reduce((acc, d) => acc + (d.usageCount || 0), 0);
 
   const categories: DocumentCategory[] = [
     'SOP & Prosedur',
@@ -93,7 +97,7 @@ export const DocumentsPage: React.FC = () => {
       ? true
       : selectedRepoTab === 'photo'
         ? (doc.repositoryType === 'photo' || ['png', 'jpg', 'jpeg', 'webp', 'image'].includes((doc.fileType || '').toLowerCase()))
-        : (doc.repositoryType || 'document') === selectedRepoTab;
+        : (doc.repositoryType !== 'photo' && !['png', 'jpg', 'jpeg', 'webp', 'image'].includes((doc.fileType || '').toLowerCase()));
 
     return matchSearch && matchCategory && matchYear && matchOrg && matchRepo;
   });
@@ -136,10 +140,7 @@ export const DocumentsPage: React.FC = () => {
 
   const resolveDocumentImageUrl = (doc: any) => {
     if (!doc) return '';
-    if (doc.cdnFileId) {
-      return `https://api-cdn.kroombox.com/api/bridge/view/${doc.cdnFileId}`;
-    }
-    if (doc.fileUrl && !doc.fileUrl.startsWith('db://') && !doc.fileUrl.includes('drive.google.com')) {
+    if (doc.fileUrl && doc.fileUrl.startsWith('/uploads/')) {
       return doc.fileUrl;
     }
     return `/api/documents/${doc.id}/view`;
@@ -217,7 +218,7 @@ export const DocumentsPage: React.FC = () => {
       )}
 
       {/* 2. Top Summary KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Card 1: Total Berkas */}
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
           <div>
@@ -229,7 +230,7 @@ export const DocumentsPage: React.FC = () => {
               <span className="text-[11px] text-slate-400 font-mono">({totalStorageMb} MB)</span>
             </div>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block mt-0.5">
-              Tersimpan aman di cloud
+              Tersimpan aman & terindeks AI
             </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
@@ -237,10 +238,10 @@ export const DocumentsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Dokumen & PDF */}
+        {/* Card 2: Dokumen */}
         <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
           <div>
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">Dokumen & Surat</span>
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">Dokumen</span>
             <div className="flex items-baseline gap-1.5 mt-0.5">
               <span className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
                 {countDoc}
@@ -274,28 +275,9 @@ export const DocumentsPage: React.FC = () => {
             <ImageIcon className="w-5 h-5" />
           </div>
         </div>
-
-        {/* Card 4: Knowledge Base RAG */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">Knowledge AI RAG</span>
-            <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
-                {countKnowledge}
-              </span>
-              <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold font-mono">({totalChunks} Chunks)</span>
-            </div>
-            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 block mt-0.5 truncate font-medium">
-              Terindeks Vector AI
-            </span>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-        </div>
       </div>
 
-      {/* 3. Repositori Tabs (Dokumen vs Foto vs Knowledge vs Semua) */}
+      {/* 3. Repositori Tabs (Semua Berkas vs Dokumen vs Foto & Media) */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-1 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setSelectedRepoTab('all')}
@@ -320,7 +302,7 @@ export const DocumentsPage: React.FC = () => {
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          <span>Dokumen & Surat</span>
+          <span>Dokumen</span>
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${selectedRepoTab === 'document' ? 'bg-blue-800/80 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
             {countDoc}
           </span>
@@ -338,21 +320,6 @@ export const DocumentsPage: React.FC = () => {
           <span>Foto & Media</span>
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${selectedRepoTab === 'photo' ? 'bg-emerald-800/80 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
             {countPhoto}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setSelectedRepoTab('knowledge')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
-            selectedRepoTab === 'knowledge'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Knowledge Base</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${selectedRepoTab === 'knowledge' ? 'bg-indigo-800/80 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-            {countKnowledge}
           </span>
         </button>
       </div>
@@ -453,6 +420,7 @@ export const DocumentsPage: React.FC = () => {
                 <th className="py-3 px-4">Proyek / Sumber</th>
                 <th className="py-3 px-4 text-center">Tahun</th>
                 <th className="py-3 px-4 text-right">Ukuran</th>
+                <th className="py-3 px-4 text-center">Penggunaan & Logs</th>
                 <th className="py-3 px-4 text-center">Aksi</th>
               </tr>
             </thead>
@@ -468,14 +436,17 @@ export const DocumentsPage: React.FC = () => {
                         className="cursor-pointer group flex items-start gap-3"
                       >
                         {isPhoto ? (
-                          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group-hover:scale-105 transition-transform flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group-hover:scale-105 transition-transform flex items-center justify-center relative">
+                            <ImageIcon className="w-4 h-4 text-emerald-500 shrink-0" />
                             <img 
                               src={resolveDocumentImageUrl(doc)} 
                               alt={doc.title} 
-                              className="w-full h-full object-cover" 
+                              className="w-full h-full object-cover absolute inset-0 z-10" 
                               onError={(e) => {
                                 const target = e.currentTarget;
-                                if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
+                                if (doc.cdnFileId && !target.src.includes('api-cdn.kroombox.com')) {
+                                  target.src = `https://api-cdn.kroombox.com/api/bridge/view/${doc.cdnFileId}`;
+                                } else if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
                                   target.src = `/api/documents/${doc.id}/view`;
                                 } else {
                                   target.style.display = 'none';
@@ -503,13 +474,11 @@ export const DocumentsPage: React.FC = () => {
                               {doc.title}
                             </span>
                             <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
-                              doc.repositoryType === 'knowledge' 
-                                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' 
-                                : isPhoto
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                              isPhoto
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                             }`}>
-                              {doc.repositoryType === 'knowledge' ? 'Knowledge' : isPhoto ? 'Foto / Media' : 'Dokumen'}
+                              {isPhoto ? 'Foto / Media' : 'Dokumen'}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-400 dark:text-slate-500 line-clamp-1 mt-0.5">
@@ -554,9 +523,48 @@ export const DocumentsPage: React.FC = () => {
                       </span>
                     </td>
 
+                    {/* Penggunaan & Log Knowledge Base */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono text-[10px] font-semibold border border-blue-200/60 dark:border-blue-900/40" 
+                            title={`${doc.viewCount || 0} kali dilihat pengguna`}
+                          >
+                            <Eye className="w-3 h-3 text-blue-500" />
+                            {doc.viewCount || 0}x dilihat
+                          </span>
+                          <span 
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-mono text-[10px] font-semibold border border-indigo-200/60 dark:border-indigo-900/40" 
+                            title={`${doc.usageCount || 0} kali digunakan oleh AI RAG`}
+                          >
+                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                            {doc.usageCount || 0}x AI
+                          </span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDocForLogs(doc);
+                          }}
+                          className="text-[10px] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium inline-flex items-center gap-1 hover:underline cursor-pointer transition-colors"
+                        >
+                          <Activity className="w-3 h-3 text-blue-500" />
+                          Riwayat Log
+                        </button>
+                      </div>
+                    </td>
+
                     {/* Action buttons */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => setSelectedDocForLogs(doc)}
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          title="Lihat Log Riwayat Penggunaan & Akses"
+                        >
+                          <Activity className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setSelectedDocForViewer(doc)}
                           className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
@@ -614,20 +622,26 @@ export const DocumentsPage: React.FC = () => {
                   onClick={() => setSelectedDocForViewer(doc)}
                   className="w-full h-36 bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer relative flex items-center justify-center"
                 >
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-1.5 bg-slate-50 dark:bg-slate-800/80">
+                    <ImageIcon className="w-8 h-8 text-emerald-500/80" />
+                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Pratinjau Foto</span>
+                  </div>
                   <img 
                     src={resolveDocumentImageUrl(doc)} 
                     alt={doc.title} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-10" 
                     onError={(e) => {
                       const target = e.currentTarget;
-                      if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
+                      if (doc.cdnFileId && !target.src.includes('api-cdn.kroombox.com')) {
+                        target.src = `https://api-cdn.kroombox.com/api/bridge/view/${doc.cdnFileId}`;
+                      } else if (!target.src.includes(`/api/documents/${doc.id}/view`)) {
                         target.src = `/api/documents/${doc.id}/view`;
                       } else {
                         target.style.display = 'none';
                       }
                     }}
                   />
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-2 right-2 z-20">
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-sm">
                       Foto
                     </span>
@@ -642,13 +656,11 @@ export const DocumentsPage: React.FC = () => {
                       {doc.fileType}
                     </span>
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${
-                      doc.repositoryType === 'knowledge' 
-                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' 
-                        : isPhoto
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                      isPhoto
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                     }`}>
-                      {doc.repositoryType === 'knowledge' ? 'Knowledge' : isPhoto ? 'Foto / Media' : 'Dokumen'}
+                      {isPhoto ? 'Foto / Media' : 'Dokumen'}
                     </span>
                   </div>
                   <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-800/60 px-2 py-0.5 rounded-md font-medium">
@@ -674,13 +686,41 @@ export const DocumentsPage: React.FC = () => {
                   <span className="tabular-nums font-medium">{doc.year}</span>
                 </div>
 
+                {/* Usage & View Counters */}
+                <div className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-[10px]">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 font-mono font-medium text-slate-600 dark:text-slate-300" title={`${doc.viewCount || 0}x dilihat pengguna`}>
+                      <Eye className="w-3 h-3 text-blue-500" /> {doc.viewCount || 0}x
+                    </span>
+                    <span className="flex items-center gap-1 font-mono font-medium text-indigo-600 dark:text-indigo-400" title={`${doc.usageCount || 0}x digunakan oleh AI RAG`}>
+                      <Sparkles className="w-3 h-3 text-indigo-500" /> {doc.usageCount || 0}x AI
+                    </span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDocForLogs(doc);
+                    }}
+                    className="text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Activity className="w-2.5 h-2.5" /> Logs
+                  </button>
+                </div>
+
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 truncate max-w-[130px] flex items-center gap-1">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 truncate max-w-[110px] flex items-center gap-1">
                     <FolderKanban className="w-3 h-3 text-blue-500 shrink-0" />
                     <span className="truncate">{doc.organizationName}</span>
                   </span>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setSelectedDocForLogs(doc)}
+                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="Lihat Log Riwayat Penggunaan & Akses"
+                    >
+                      <Activity className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => setEditingDoc(doc)}
                       className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
@@ -762,6 +802,13 @@ export const DocumentsPage: React.FC = () => {
         onSave={async (id, updates) => {
           await updateDocument(id, updates);
         }}
+      />
+
+      {/* Document Logs & Audit Modal */}
+      <DocumentLogsModal
+        isOpen={!!selectedDocForLogs}
+        document={selectedDocForLogs}
+        onClose={() => setSelectedDocForLogs(null)}
       />
     </div>
   );

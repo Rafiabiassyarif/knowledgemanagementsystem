@@ -8,7 +8,6 @@ import { OrganizationDetailPage } from './pages/OrganizationDetailPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { UsersPage } from './pages/UsersPage';
 import { ActivityPage } from './pages/ActivityPage';
-import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
@@ -60,7 +59,7 @@ export default function App() {
             <Route path="documents" element={<DocumentsPage />} />
             <Route path="cdn" element={<CdnMonitoringPage />} />
             <Route path="activity" element={<ActivityPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+            <Route path="settings" element={<Navigate to="/admin" replace />} />
           </Route>
 
           {/* Legacy redirects to unified /app */}

@@ -116,6 +116,7 @@ async function createTables() {
       category VARCHAR(100) NOT NULL,
       file_type VARCHAR(20) NOT NULL,
       file_size_kb INT DEFAULT 0,
+      chunks_count INT DEFAULT 0,
       file_url TEXT NULL,
       file_name VARCHAR(255) NULL,
       year INT DEFAULT 2024,
@@ -161,6 +162,10 @@ async function createTables() {
     await p.query('ALTER TABLE documents ADD COLUMN cdn_file_id VARCHAR(100) NULL AFTER file_url');
     console.log('[DB] Kolom cdn_file_id ditambahkan ke tabel documents.');
   }
+  if (!existingDocCols.has('chunks_count')) {
+    await p.query('ALTER TABLE documents ADD COLUMN chunks_count INT DEFAULT 0 AFTER file_size_kb');
+    console.log('[DB] Kolom chunks_count ditambahkan ke tabel documents.');
+  }
   if (!existingDocCols.has('uploader_role')) {
     await p.query("ALTER TABLE documents ADD COLUMN uploader_role VARCHAR(20) DEFAULT 'user' AFTER uploaded_by_id");
     console.log('[DB] Kolom uploader_role ditambahkan ke tabel documents.');
@@ -171,6 +176,35 @@ async function createTables() {
       console.warn('[DB] Gagal update role dokumen lama:', e);
     }
   }
+  if (!existingDocCols.has('view_count')) {
+    await p.query('ALTER TABLE documents ADD COLUMN view_count INT DEFAULT 0 AFTER chunks_count');
+    console.log('[DB] Kolom view_count ditambahkan ke tabel documents.');
+  }
+  if (!existingDocCols.has('usage_count')) {
+    await p.query('ALTER TABLE documents ADD COLUMN usage_count INT DEFAULT 0 AFTER view_count');
+    console.log('[DB] Kolom usage_count ditambahkan ke tabel documents.');
+  }
+  if (!existingDocCols.has('last_accessed_at')) {
+    await p.query('ALTER TABLE documents ADD COLUMN last_accessed_at TIMESTAMP NULL AFTER usage_count');
+    console.log('[DB] Kolom last_accessed_at ditambahkan ke tabel documents.');
+  }
+
+  // 3b. Document Access & Usage Logs (Pelacakan berapa kali knowledge base / dokumen dilihat & digunakan)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS document_logs (
+      id VARCHAR(64) PRIMARY KEY,
+      document_id VARCHAR(64) NOT NULL,
+      organization_id VARCHAR(64) NULL,
+      user_id VARCHAR(64) NULL,
+      user_name VARCHAR(255) NOT NULL,
+      user_role VARCHAR(50) DEFAULT 'user',
+      action_type ENUM('view', 'ai_query', 'download', 'preview') DEFAULT 'view',
+      notes TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_doc_logs_doc (document_id),
+      INDEX idx_doc_logs_time (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
 
   // Users quota & subscription plan migration
   const [userCols] = await p.query<any[]>(

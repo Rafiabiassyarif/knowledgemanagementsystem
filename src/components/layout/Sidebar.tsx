@@ -9,7 +9,6 @@ import {
   Cpu,
   Sparkles,
   Activity,
-  Settings,
   ShieldCheck,
   LogOut,
   FolderLock,
@@ -44,21 +43,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
     navigate('/login');
   };
 
-  // Portal /app hanya untuk pengguna (user). Admin memakai konsol terpisah di /admin.
+  // Portal /app untuk user biasa; /admin untuk admin pengelola.
   const getNavLinks = (): NavItem[] => {
     if (!currentUser) return [];
+
+    if (currentUser.role === 'admin' || location.pathname.startsWith('/admin')) {
+      return [
+        { to: '/admin', label: 'Overview Platform', icon: LayoutDashboard },
+        { to: '/admin/projects', label: 'Semua Project', icon: FolderKanban },
+        { to: '/admin/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
+        { to: '/admin/users', label: 'Pengguna & Hak Akses', icon: Users },
+        { to: '/admin/cdn', label: 'Monitoring CDN & RAG', icon: HardDrive },
+        { to: '/admin/activity', label: 'Log Aktivitas', icon: Activity },
+      ];
+    }
+
     return [
       { to: '/app', label: 'Overview', icon: LayoutDashboard },
-      { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
       { to: '/app/projects', label: 'Project', icon: FolderKanban },
+      { to: '/app/documents', label: 'Dokumen & Pengetahuan', icon: FileText },
     ];
   };
 
   const navLinks = getNavLinks();
 
   const isLinkActive = (to: string) => {
-    if (to === '/app') {
-      return location.pathname === '/app';
+    if (to === '/app' || to === '/admin') {
+      return location.pathname === to;
     }
     return location.pathname === to || location.pathname.startsWith(`${to}/`);
   };

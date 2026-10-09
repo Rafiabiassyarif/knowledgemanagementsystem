@@ -103,6 +103,9 @@ export interface DocumentItem {
   version: string;
   status: 'ready' | 'processing' | 'failed' | 'archived' | 'indexed' | string;
   chunksCount: number;
+  viewCount?: number;
+  usageCount?: number;
+  lastAccessedAt?: string;
   summary: string;
   tags: string[];
   department?: string;
@@ -119,7 +122,20 @@ export interface DocumentItem {
   uploaded_by?: string;
   uploaded_at?: string;
   chunks_count?: number;
+  view_count?: number;
+  usage_count?: number;
+  last_accessed_at?: string;
   description?: string;
+}
+
+export interface DocumentLogItem {
+  id: string;
+  documentId: string;
+  userName: string;
+  userRole: string;
+  actionType: 'view' | 'ai_query' | 'download' | 'preview';
+  notes?: string;
+  createdAt: string;
 }
 
 export interface KnowledgeChunk {

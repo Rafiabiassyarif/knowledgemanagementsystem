@@ -99,7 +99,7 @@ export const OrganizationsPage: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Ruang lingkup pengelolaan dokumen, galeri foto, dan basis pengetahuan terisolasi per organisasi.
+                Ruang lingkup pengelolaan dokumen, galeri foto, dan basis pengetahuan terisolasi per project.
               </p>
             </div>
           </div>
@@ -277,7 +277,7 @@ export const OrganizationsPage: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-2">
                         <Link 
-                          to={`/app/projects/${org.id}`}
+                          to={isAdmin ? `/admin/projects/${org.id}` : `/app/projects/${org.id}`}
                           className="font-semibold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors block"
                         >
                           {org.name}
@@ -406,7 +406,7 @@ export const OrganizationsPage: React.FC = () => {
 
                     {/* 2. Lihat Detail Project */}
                     <Link
-                      to={`/app/projects/${org.id}`}
+                      to={isAdmin ? `/admin/projects/${org.id}` : `/app/projects/${org.id}`}
                       className="p-1.5 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
                       title="Lihat Detail & Repositori Project"
                     >
@@ -455,7 +455,7 @@ export const OrganizationsPage: React.FC = () => {
             ) : (
               <tr>
                 <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
-                  Tidak ada organisasi yang terdaftar atau cocok dengan pencarian.
+                  Tidak ada project yang terdaftar atau cocok dengan pencarian.
                 </td>
               </tr>
             )}
@@ -474,7 +474,7 @@ export const OrganizationsPage: React.FC = () => {
                   {(org.code || 'ORG').slice(0, 3)}
                 </div>
                 <div>
-                  <Link to={`/app/projects/${org.id}`} className="text-xs font-semibold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 block">
+                  <Link to={isAdmin ? `/admin/projects/${org.id}` : `/app/projects/${org.id}`} className="text-xs font-semibold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 block">
                     {org.name}
                   </Link>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -550,7 +550,7 @@ export const OrganizationsPage: React.FC = () => {
                 </button>
 
                 <Link
-                  to={`/app/projects/${org.id}`}
+                  to={isAdmin ? `/admin/projects/${org.id}` : `/app/projects/${org.id}`}
                   className="px-2.5 py-1 text-[11px] font-medium bg-blue-600 text-white rounded-lg hover:bg-slate-800 dark:hover:bg-blue-500"
                 >
                   Detail
@@ -561,7 +561,7 @@ export const OrganizationsPage: React.FC = () => {
         ))
         ) : (
           <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-400">
-            Tidak ada organisasi yang terdaftar.
+            Tidak ada project yang terdaftar.
           </div>
         )}
       </div>

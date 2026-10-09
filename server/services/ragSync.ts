@@ -146,6 +146,10 @@ export async function reconcileRagDeletions(orgId?: string, force: boolean = fal
           // https://rag.aiones.app/. Penghapusan HANYA dijalankan bila allowDelete=true
           // (tombol sinkronisasi manual admin) — worker latar belakang tidak menghapus apa pun.
           if (!existsInRag && allowDelete) {
+            // Pengaman: Jangan pernah hapus dokumen seed atau dokumen default platform
+            if (doc.id.startsWith('doc-seed-')) {
+              continue;
+            }
             console.log(`[RAG SYNC -> PURGE] Dokumen "${doc.title}" (${doc.id}) terdeteksi telah dihapus di https://rag.aiones.app/. Memulai pembersihan otomatis dari CDN & database...`);
 
             // 1. Hapus aset fisik dari Kroombox Edge CDN

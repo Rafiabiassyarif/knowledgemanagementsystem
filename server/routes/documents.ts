@@ -90,13 +90,21 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       const isImage = (r.repository_type === 'photo') || 
         ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(ext);
 
-      // Prioritaskan cdn_file_id untuk URL render langsung CDN Kroombox.
-      // Jangan gunakan tautan Google Drive (drive.google.com) karena diblokir oleh browser saat di-render di img / iframe.
-      const resolvedFileUrl = r.cdn_file_id
-        ? cdnViewUrl(r.cdn_file_id)
-        : (r.file_url && !r.file_url.startsWith('db://') && !r.file_url.includes('drive.google.com'))
-          ? r.file_url
-          : `/api/documents/${r.id}/view`;
+      // Cek apakah berkas tersimpan secara lokal di uploads/
+      const uploadsDir = path.resolve('uploads');
+      const localRelativeUrl = (() => {
+        if (!fs.existsSync(uploadsDir)) return null;
+        if (r.file_url && r.file_url.startsWith('/uploads/') && fs.existsSync(path.resolve('.' + r.file_url))) {
+          return r.file_url;
+        }
+        const match = fs.readdirSync(uploadsDir).find(f => f.startsWith(`${r.id}-`));
+        return match ? `/uploads/${match}` : null;
+      })();
+
+      // Prioritaskan berkas lokal untuk performa instan (0ms), baru kemudian CDN
+      const resolvedFileUrl = localRelativeUrl
+        || (r.cdn_file_id ? cdnViewUrl(r.cdn_file_id) : null)
+        || ((r.file_url && !r.file_url.startsWith('db://') && !r.file_url.includes('drive.google.com')) ? r.file_url : `/api/documents/${r.id}/view`);
 
       return {
         id: r.id,
@@ -119,6 +127,9 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
         uploaderRole: r.uploader_role || 'user',
         uploadedAt: r.created_at,
         chunksCount: Number(r.chunks_count) || 0,
+        viewCount: Number(r.view_count) || 0,
+        usageCount: Number(r.usage_count) || 0,
+        lastAccessedAt: r.last_accessed_at || r.created_at,
         totalTokens: Number(r.total_tokens) || Math.max(500, Math.round(r.file_size_kb * 1.8)),
         ragStatus: 'indexed'
       };
@@ -214,11 +225,19 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
     const isImage = (r.repository_type === 'photo') || 
       ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(ext);
 
-    const resolvedFileUrl = r.cdn_file_id
-      ? cdnViewUrl(r.cdn_file_id)
-      : (r.file_url && !r.file_url.startsWith('db://') && !r.file_url.includes('drive.google.com'))
-        ? r.file_url
-        : `/api/documents/${r.id}/view`;
+    const uploadsDir = path.resolve('uploads');
+    const localRelativeUrl = (() => {
+      if (!fs.existsSync(uploadsDir)) return null;
+      if (r.file_url && r.file_url.startsWith('/uploads/') && fs.existsSync(path.resolve('.' + r.file_url))) {
+        return r.file_url;
+      }
+      const match = fs.readdirSync(uploadsDir).find(f => f.startsWith(`${r.id}-`));
+      return match ? `/uploads/${match}` : null;
+    })();
+
+    const resolvedFileUrl = localRelativeUrl
+      || (r.cdn_file_id ? cdnViewUrl(r.cdn_file_id) : null)
+      || ((r.file_url && !r.file_url.startsWith('db://') && !r.file_url.includes('drive.google.com')) ? r.file_url : `/api/documents/${r.id}/view`);
 
     const doc = {
       id: r.id,
@@ -238,13 +257,112 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
       notes: r.notes,
       uploadedBy: r.uploaded_by,
       uploadedAt: r.created_at,
-      chunksCount: Number(r.chunks_count) || 0
+      chunksCount: Number(r.chunks_count) || 0,
+      viewCount: Number(r.view_count) || 0,
+      usageCount: Number(r.usage_count) || 0,
+      lastAccessedAt: r.last_accessed_at || r.created_at
     };
 
     res.json({ success: true, document: doc });
   } catch (err: any) {
     console.error('[GET DOC ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal memuat dokumen.' });
+  }
+});
+
+// 2b. Get logs & usage statistics for a document
+router.get('/:id/logs', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const p = getPool();
+
+    const [docRows] = await p.query<any[]>('SELECT id, title, category, view_count, usage_count, last_accessed_at FROM documents WHERE id = ?', [id]);
+    if (docRows.length === 0) {
+      res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan.' });
+      return;
+    }
+    const doc = docRows[0];
+
+    const [logs] = await p.query<any[]>(
+      'SELECT id, document_id, organization_id, user_id, user_name, user_role, action_type, notes, created_at ' +
+      'FROM document_logs WHERE document_id = ? ORDER BY created_at DESC LIMIT 100',
+      [id]
+    );
+
+    res.json({
+      success: true,
+      documentId: id,
+      documentTitle: doc.title,
+      metrics: {
+        viewCount: Number(doc.view_count) || 0,
+        usageCount: Number(doc.usage_count) || 0,
+        lastAccessedAt: doc.last_accessed_at
+      },
+      logs: logs.map(l => ({
+        id: l.id,
+        documentId: l.document_id,
+        userName: l.user_name,
+        userRole: l.user_role,
+        actionType: l.action_type,
+        notes: l.notes,
+        createdAt: l.created_at
+      }))
+    });
+  } catch (err: any) {
+    console.error('[GET DOC LOGS ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengambil log penggunaan dokumen.' });
+  }
+});
+
+// 2c. Log access event for a document (View / Preview / AI RAG Citation)
+router.post('/:id/log-access', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { actionType = 'view', notes } = req.body;
+    const p = getPool();
+    const user = (req as any).authUser;
+    const userName = user?.name || 'Pengguna';
+    const userRole = user?.role || 'user';
+    const userId = user?.id || null;
+
+    const [docRows] = await p.query<any[]>('SELECT organization_id, title FROM documents WHERE id = ?', [id]);
+    if (docRows.length === 0) {
+      res.status(404).json({ success: false, message: 'Dokumen tidak ditemukan.' });
+      return;
+    }
+    const doc = docRows[0];
+
+    const logId = `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const effectiveNotes = notes || (
+      actionType === 'view' ? 'Dokumen dibuka pada modal pratinjau' :
+      actionType === 'download' ? 'Berkas dokumen diunduh ke perangkat' :
+      actionType === 'ai_query' ? 'Knowledge base digunakan sebagai referensi AI' :
+      'Aktivitas dokumen'
+    );
+
+    await p.query(
+      'INSERT INTO document_logs (id, document_id, organization_id, user_id, user_name, user_role, action_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [logId, id, doc.organization_id || null, userId, userName, userRole, actionType, effectiveNotes]
+    );
+
+    if (actionType === 'view' || actionType === 'preview') {
+      await p.query('UPDATE documents SET view_count = COALESCE(view_count, 0) + 1, last_accessed_at = NOW() WHERE id = ?', [id]);
+    } else {
+      await p.query('UPDATE documents SET usage_count = COALESCE(usage_count, 0) + 1, last_accessed_at = NOW() WHERE id = ?', [id]);
+    }
+
+    const [updated] = await p.query<any[]>('SELECT view_count, usage_count, last_accessed_at FROM documents WHERE id = ?', [id]);
+    res.json({
+      success: true,
+      metrics: {
+        viewCount: Number(updated[0]?.view_count) || 0,
+        usageCount: Number(updated[0]?.usage_count) || 0,
+        lastAccessedAt: updated[0]?.last_accessed_at
+      }
+    });
+  } catch (err: any) {
+    console.error('[POST DOC LOG ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mencatat log akses dokumen.' });
   }
 });
 
@@ -377,36 +495,33 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
     const fileName: string | null = file ? file.originalname : null;
     // CRITICAL: All documents, files, and photos are stored strictly in Kroombox Edge CDN.
     // MySQL ONLY stores metadata (user, admin, and organization references).
-    // NO physical binary data (LONGBLOB) is stored in MySQL.
     let cdnFileId: string | null = null;
     let fileUrl: string = `/api/documents/${docId}/download`;
 
     if (file && file.buffer) {
+      // 1. Simpan salinan fisik secara instan di local uploads/
+      // Memastikan thumbnail, grid, dan pratinjau tampil 0 milidetik tanpa menunggu CDN
+      const uploadsDir = path.resolve('uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const safeName = `${docId}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const localPath = path.join(uploadsDir, safeName);
+      try {
+        fs.writeFileSync(localPath, file.buffer);
+        fileUrl = `/uploads/${safeName}`;
+        console.log(`[LOCAL STORAGE] Berkas fisik tersimpan lokal di: ${fileUrl}`);
+      } catch (localErr: any) {
+        console.error('[LOCAL STORAGE SAVE FAILED]', localErr);
+      }
+
+      // 2. Unggah juga ke Kroombox Edge CDN untuk backup cloud & sinkronisasi
       try {
         const cdnResult = await uploadToKroomboxCDN(file.buffer, file.originalname, file.mimetype || 'application/octet-stream');
         if (cdnResult && cdnResult.url) {
           cdnFileId = cdnResult.fileId;
-          fileUrl = cdnResult.url;
-          console.log(`[KROOMBOX CDN] Berkas "${file.originalname}" sukses diunggah ke CDN: ${fileUrl}`);
+          console.log(`[KROOMBOX CDN] Berkas "${file.originalname}" sukses diunggah ke CDN: ${cdnResult.url}`);
         }
       } catch (cdnErr: any) {
-        console.warn('[CDN UPLOAD WARN, FALLING BACK TO LOCAL STORAGE]', cdnErr?.message || cdnErr);
-        try {
-          const uploadsDir = path.resolve('uploads');
-          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-          const safeName = `${docId}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          const localPath = path.join(uploadsDir, safeName);
-          fs.writeFileSync(localPath, file.buffer);
-          fileUrl = `/uploads/${safeName}`;
-          console.log(`[LOCAL STORAGE FALLBACK] Berkas tersimpan lokal di: ${fileUrl}`);
-        } catch (localErr: any) {
-          console.error('[LOCAL STORAGE SAVE FAILED]', localErr);
-          res.status(500).json({
-            success: false,
-            message: `Gagal menyimpan berkas: ${localErr?.message || 'Kesalahan penyimpanan'}.`
-          });
-          return;
-        }
+        console.warn('[CDN UPLOAD WARN]', cdnErr?.message || cdnErr);
       }
     }
 
@@ -642,6 +757,36 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
   }
 });
 
+// Helper to generate a valid SVG placeholder for photo/media documents without physical binary
+function generateImagePlaceholderSvg(title: string, ext: string, orgName?: string): string {
+  const safeTitle = (title || 'Berkas Foto').replace(/[<>&"]/g, '');
+  const safeOrg = (orgName || 'KMS BUMD').replace(/[<>&"]/g, '');
+  const safeExt = (ext || 'PNG').toUpperCase();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#bgGrad)" rx="16"/>
+  <rect x="20" y="20" width="560" height="360" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="8 8" rx="12"/>
+  <circle cx="300" cy="150" r="44" fill="url(#iconGrad)" opacity="0.15"/>
+  <path d="M280 165l12-14a4 4 0 016 0l22 26m-10-10l8-9a4 4 0 016 0l16 19M270 185h60a6 6 0 006-6v-38a6 6 0 00-6-6h-60a6 6 0 00-6 6v38a6 6 0 006 6z" stroke="#10b981" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="286" cy="145" r="4" fill="#10b981"/>
+  <text x="300" y="235" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="bold" fill="#f8fafc" text-anchor="middle">${safeTitle}</text>
+  <text x="300" y="265" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="12" fill="#94a3b8" text-anchor="middle">${safeOrg} · Format ${safeExt}</text>
+  <rect x="250" y="290" width="100" height="24" rx="12" fill="#065f46"/>
+  <text x="300" y="306" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="600" fill="#34d399" text-anchor="middle">FOTO / MEDIA</text>
+</svg>`;
+}
+
 // Helper to generate a valid PDF buffer for documents without physical file
 function generatePdfBuffer(title: string, orgName: string, category: string, summary: string): Buffer {
   const cleanTitle = (title || 'Dokumen Resmi').replace(/[()\\]/g, '');
@@ -823,6 +968,15 @@ router.get('/:id/view', async (req: Request, res: Response): Promise<void> => {
     }
 
     const doc = rows[0];
+    // Catat log view secara asinkron
+    p.query('UPDATE documents SET view_count = COALESCE(view_count, 0) + 1, last_accessed_at = NOW() WHERE id = ?', [id]).catch(() => {});
+    const logId = `log-v-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const actorUser = (req as any).authUser;
+    p.query(
+      'INSERT INTO document_logs (id, document_id, organization_id, user_id, user_name, user_role, action_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [logId, id, doc.organization_id || null, actorUser?.id || null, actorUser?.name || 'Pengguna', actorUser?.role || 'user', 'view', 'Pratinjau berkas dibuka']
+    ).catch(() => {});
+
     const ext = (doc.file_type || path.extname(doc.file_name || doc.file_url || '').replace('.', '') || 'pdf').toLowerCase();
     const safeTitle = (doc.title || doc.file_name || 'berkas').replace(/[/\\?%*:|"<>]/g, '_');
     const viewFileName = safeTitle.toLowerCase().endsWith(`.${ext}`) ? safeTitle : `${safeTitle}.${ext}`;
@@ -839,22 +993,52 @@ router.get('/:id/view', async (req: Request, res: Response): Promise<void> => {
     };
     const defaultMime = mimeMap[ext] || 'application/octet-stream';
 
-    // 1. Kroombox CDN direct streaming (inline)
+    // 1. PRIORITAS UTAMA: Berkas fisik lokal di uploads/ (Performa instan 0ms tanpa latensi CDN)
+    const uploadsDir = path.resolve('uploads');
+    let localFilePath: string | null = null;
+    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
+      const candidate = path.resolve('.' + doc.file_url);
+      if (fs.existsSync(candidate)) localFilePath = candidate;
+    }
+    if (!localFilePath && fs.existsSync(uploadsDir)) {
+      const match = fs.readdirSync(uploadsDir).find(f => f.startsWith(`${doc.id}-`));
+      if (match) localFilePath = path.join(uploadsDir, match);
+    }
+
+    if (localFilePath && fs.existsSync(localFilePath)) {
+      res.setHeader('Content-Type', defaultMime);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.sendFile(localFilePath);
+      return;
+    }
+
+    // 2. Kroombox CDN direct streaming (inline) & otomatis simpan ke uploads/
     const cdnUrl = doc.cdn_file_id ? cdnViewUrl(doc.cdn_file_id) : null;
     if (cdnUrl) {
       try {
         let cdnRes = await fetch(cdnUrl);
-        for (let attempt = 0; attempt < 2 && !cdnRes.ok; attempt++) {
+        for (let attempt = 0; attempt < 3 && !cdnRes.ok; attempt++) {
           await new Promise(r => setTimeout(r, 1000));
           cdnRes = await fetch(cdnUrl);
         }
         if (cdnRes.ok && cdnRes.body) {
           const contentType = cdnRes.headers.get('content-type') || defaultMime;
+          const arrayBuf = await cdnRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+          try {
+            if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+            const cachePath = path.join(uploadsDir, `${doc.id}-${viewFileName}`);
+            fs.writeFileSync(cachePath, buffer);
+          } catch (cErr) {
+            console.warn('[LOCAL CACHE WRITE WARN]', cErr);
+          }
           res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
           res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
           res.setHeader('Cache-Control', 'public, max-age=86400');
-          Readable.fromWeb(cdnRes.body as any).pipe(res);
+          res.send(buffer);
           return;
         }
       } catch (cdnErr) {
@@ -862,12 +1046,13 @@ router.get('/:id/view', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    // 2. Direct external URL (bukan Google drive)
+    // 3. Direct external URL (bukan Google drive)
     if (doc.file_url && (doc.file_url.startsWith('http://') || doc.file_url.startsWith('https://')) && !doc.file_url.includes('drive.google.com')) {
       try {
         const extRes = await fetch(doc.file_url);
         if (extRes.ok && extRes.body) {
-          res.setHeader('Content-Type', extRes.headers.get('content-type') || defaultMime);
+          const contentType = extRes.headers.get('content-type') || defaultMime;
+          res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
           res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
           Readable.fromWeb(extRes.body as any).pipe(res);
@@ -878,18 +1063,16 @@ router.get('/:id/view', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    // 2b. Local file
-    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
-      const localFilePath = path.resolve('.' + doc.file_url);
-      if (fs.existsSync(localFilePath)) {
-        res.setHeader('Content-Type', defaultMime);
-        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
-        res.sendFile(localFilePath);
-        return;
-      }
+    // 4. Fallback jika berkas fisik belum/tidak tersedia (Jangan di-cache agar browser mengambil gambar asli saat siap)
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext) || (doc.repository_type || '').toLowerCase() === 'photo') {
+      const svg = generateImagePlaceholderSvg(doc.title, ext, doc.organization_name);
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(svg);
+      return;
     }
 
-    // 3. Fallback PDF generator untuk dokumen tanpa berkas biner
     const pdfBuf = generatePdfBuffer(doc.title, doc.organization_name, doc.category, doc.summary);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(viewFileName)}"`);
@@ -919,36 +1102,68 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
     }
 
     const doc = rows[0];
+    // Catat log unduhan / penggunaan secara asinkron
+    p.query('UPDATE documents SET usage_count = COALESCE(usage_count, 0) + 1, last_accessed_at = NOW() WHERE id = ?', [id]).catch(() => {});
+    const logId = `log-d-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const actorUser = (req as any).authUser;
+    p.query(
+      'INSERT INTO document_logs (id, document_id, organization_id, user_id, user_name, user_role, action_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [logId, id, doc.organization_id || null, actorUser?.id || null, actorUser?.name || 'Pengguna', actorUser?.role || 'user', 'download', 'Berkas resmi diunduh']
+    ).catch(() => {});
+
     const ext = (doc.file_type || path.extname(doc.file_name || doc.file_url || '').replace('.', '') || 'pdf').toLowerCase();
+    const isImageDoc = (doc.repository_type || '').toLowerCase() === 'photo'
+      || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext);
     const safeTitle = (doc.title || doc.file_name || 'dokumen').replace(/[/\\?%*:|"<>]/g, '_');
     const downloadFileName = safeTitle.toLowerCase().endsWith(`.${ext}`) ? safeTitle : `${safeTitle}.${ext}`;
 
-    // 1. CDN file ID -> stream langsung dari URL render CDN (bukan signed/Google Drive).
-    //    Foto/gambar dikirim inline supaya langsung tampil di browser.
-    const isImageDoc = doc.repository_type === 'photo'
-      || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext);
+    // 1. PRIORITAS UTAMA: Berkas fisik lokal di uploads/ (Unduh instan tanpa latensi)
+    const uploadsDir = path.resolve('uploads');
+    let localFilePath: string | null = null;
+    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
+      const candidate = path.resolve('.' + doc.file_url);
+      if (fs.existsSync(candidate)) localFilePath = candidate;
+    }
+    if (!localFilePath && fs.existsSync(uploadsDir)) {
+      const match = fs.readdirSync(uploadsDir).find(f => f.startsWith(`${doc.id}-`));
+      if (match) localFilePath = path.join(uploadsDir, match);
+    }
+
+    if (localFilePath && fs.existsSync(localFilePath)) {
+      res.setHeader('Content-Disposition', isImageDoc
+        ? `inline; filename="${encodeURIComponent(downloadFileName)}"`
+        : `attachment; filename="${encodeURIComponent(downloadFileName)}"`);
+      res.sendFile(localFilePath);
+      return;
+    }
+
+    // 2. CDN file ID -> stream langsung dari URL render CDN & simpan ke cache uploads/
     const cdnUrl = doc.cdn_file_id ? cdnViewUrl(doc.cdn_file_id) : null;
     if (cdnUrl) {
       try {
-        // CDN menyinkronkan berkas secara async: sesaat setelah upload statusnya "pending"
-        // (302 -> drive...?id=pending). Coba beberapa kali sebelum menyerah.
         let cdnRes = await fetch(cdnUrl);
         for (let attempt = 0; attempt < 3 && !cdnRes.ok; attempt++) {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 1000));
           cdnRes = await fetch(cdnUrl);
         }
         if (cdnRes.ok && cdnRes.body) {
-          res.setHeader('Content-Type', cdnRes.headers.get('content-type') || 'application/octet-stream');
+          const contentType = cdnRes.headers.get('content-type') || 'application/octet-stream';
+          const arrayBuf = await cdnRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+          try {
+            if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+            const cachePath = path.join(uploadsDir, `${doc.id}-${downloadFileName}`);
+            fs.writeFileSync(cachePath, buffer);
+          } catch (cErr) {
+            console.warn('[LOCAL CACHE WRITE WARN]', cErr);
+          }
+          res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Disposition', isImageDoc
             ? `inline; filename="${encodeURIComponent(downloadFileName)}"`
             : `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
-          if (cdnRes.headers.get('content-length')) {
-            res.setHeader('Content-Length', cdnRes.headers.get('content-length')!);
-          }
-          Readable.fromWeb(cdnRes.body as any).pipe(res);
+          res.send(buffer);
           return;
         }
-        // Berkas belum siap di CDN -> jangan kirim PDF palsu; arahkan browser ke berkas CDN.
         res.redirect(cdnUrl);
         return;
       } catch (cdnErr) {
@@ -956,7 +1171,7 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
       }
     }
 
-    // 2. Direct external CDN URL (http / https) -> fetch dan stream dengan Content-Disposition: attachment!
+    // 3. Direct external CDN URL (http / https) -> fetch dan stream
     if (doc.file_url && (doc.file_url.startsWith('http://') || doc.file_url.startsWith('https://'))) {
       try {
         const extRes = await fetch(doc.file_url);
@@ -976,17 +1191,15 @@ router.get('/:id/download', requireAuth, async (req: Request, res: Response): Pr
       }
     }
 
-    // 2b. URL lokal /uploads/... -> res.download or res.sendFile
-    if (doc.file_url && doc.file_url.startsWith('/uploads/')) {
-      const localFilePath = path.resolve('.' + doc.file_url);
-      if (fs.existsSync(localFilePath)) {
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"`);
-        res.sendFile(localFilePath);
-        return;
-      }
+    // 3. Fallback dokumen seed/legacy tanpa berkas fisik: hasilkan gambar/PDF
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext) || (doc.repository_type || '').toLowerCase() === 'photo') {
+      const svg = generateImagePlaceholderSvg(doc.title, ext, doc.organization_name);
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"`);
+      res.send(Buffer.from(svg, 'utf-8'));
+      return;
     }
 
-    // 3. Fallback dokumen seed/legacy tanpa berkas fisik: hasilkan PDF ringkasan
     const pdfBuf = generatePdfBuffer(doc.title, doc.organization_name, doc.category, doc.summary);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadFileName)}"`);

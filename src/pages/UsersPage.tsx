@@ -68,7 +68,7 @@ export const UsersPage: React.FC = () => {
   const handleRoleChange = (userId: string, userName: string, targetRole: 'user' | 'admin') => {
     updateUserRole(userId, targetRole);
     if (targetRole === 'admin') {
-      showToast(`${userName} berhasil diangkat sebagai Admin! Akun ini kini memiliki wewenang untuk membuat & mengelola organisasi.`);
+      showToast(`${userName} berhasil diangkat sebagai Admin! Akun ini kini memiliki wewenang untuk membuat & mengelola project.`);
     } else {
       showToast(`Peran ${userName} telah disesuaikan kembali menjadi User biasa.`);
     }
@@ -252,7 +252,7 @@ export const UsersPage: React.FC = () => {
 
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1.5">
-            <span className="text-xs font-medium">Admin Organisasi</span>
+            <span className="text-xs font-medium">Admin Project</span>
             <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
@@ -275,7 +275,7 @@ export const UsersPage: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1.5">
             <span className="text-xs font-medium">
-              {currentUser?.role === 'admin' ? 'Cakupan BUMD' : 'Status Pengguna'}
+              {currentUser?.role === 'admin' ? 'Cakupan Project' : 'Status Pengguna'}
             </span>
             <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
@@ -283,7 +283,7 @@ export const UsersPage: React.FC = () => {
             {currentUser?.role === 'admin' ? organizations.length : '100%'}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {currentUser?.role === 'admin' ? 'Entitas organisasi aktif' : 'Terverifikasi & aktif'}
+            {currentUser?.role === 'admin' ? 'Entitas project aktif' : 'Terverifikasi & aktif'}
           </p>
         </div>
       </div>
@@ -296,7 +296,7 @@ export const UsersPage: React.FC = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari nama, email, atau organisasi..."
+              placeholder="Cari nama, email, atau project..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full text-xs pl-9 pr-8 py-2 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-600 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-colors"
@@ -312,16 +312,16 @@ export const UsersPage: React.FC = () => {
             )}
           </div>
 
-          {/* Filter Organisasi */}
+          {/* Filter Project */}
           {currentUser?.role === 'admin' && (
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">BUMD:</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Project:</span>
               <select
                 value={orgFilter}
                 onChange={(e) => setOrgFilter(e.target.value)}
                 className="text-xs rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 bg-slate-50/50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 cursor-pointer"
               >
-                <option value="all">Semua Organisasi</option>
+                <option value="all">Semua Project</option>
                 {organizations.map(o => (
                   <option key={o.id} value={o.id}>{o.name}</option>
                 ))}
@@ -374,7 +374,7 @@ export const UsersPage: React.FC = () => {
               <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/70 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Pengguna</th>
                 {currentUser?.role === 'admin' && (
-                  <th className="py-3.5 px-4">Organisasi</th>
+                  <th className="py-3.5 px-4">Project</th>
                 )}
                 <th className="py-3.5 px-4">Peran</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
@@ -635,7 +635,7 @@ export const UsersPage: React.FC = () => {
 
           {currentUser?.role === 'admin' && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Pilih Organisasi *</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Pilih Project *</label>
               <select
                 value={newOrgId}
                 onChange={(e) => setNewOrgId(e.target.value)}
@@ -753,7 +753,7 @@ export const UsersPage: React.FC = () => {
                 Suspend Akun Pengguna?
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Apakah Anda yakin ingin menonaktifkan akun <strong className="text-slate-700 dark:text-slate-200">{confirmSuspendUser.name}</strong> ({confirmSuspendUser.email})? Pengguna tidak akan dapat login ke sistem hingga akunnya diaktifkan kembali. Data dan keanggotaan organisasi tetap dipertahankan.
+                Apakah Anda yakin ingin menonaktifkan akun <strong className="text-slate-700 dark:text-slate-200">{confirmSuspendUser.name}</strong> ({confirmSuspendUser.email})? Pengguna tidak akan dapat login ke sistem hingga akunnya diaktifkan kembali. Data dan keanggotaan project tetap dipertahankan.
               </p>
             </div>
 

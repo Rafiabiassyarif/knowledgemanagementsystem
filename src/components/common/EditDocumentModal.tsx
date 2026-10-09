@@ -166,7 +166,7 @@ export const EditDocumentModal: React.FC<EditDocumentModalProps> = ({
             {/* Repository Type */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                <FileText className="w-3.5 h-3.5 text-blue-500" />
                 Tipe Repositori
               </label>
               <select
@@ -176,7 +176,6 @@ export const EditDocumentModal: React.FC<EditDocumentModalProps> = ({
               >
                 <option value="document">Dokumen Resmi</option>
                 <option value="photo">Foto & Dokumentasi Visual</option>
-                <option value="knowledge">Knowledge Base / Panduan</option>
               </select>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, FolderKanban, HardDrive, MessageSquare, Menu } from 'lucide-react';
+import { LayoutDashboard, FileText, FolderKanban, Users, Menu } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface MobileNavProps {
@@ -11,16 +11,26 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
   const { currentUser } = useApp();
   const location = useLocation();
 
-  // Portal /app khusus pengguna; admin memakai konsol /admin.
-  const getItems = () => [
-    { to: '/app', label: 'Overview', icon: LayoutDashboard },
-    { to: '/app/documents', label: 'Dokumen', icon: FileText },
-    { to: '/app/projects', label: 'Project', icon: FolderKanban },
-  ];
+  // Portal /app untuk pengguna; /admin untuk admin pengelola.
+  const getItems = () => {
+    if (currentUser?.role === 'admin' || location.pathname.startsWith('/admin')) {
+      return [
+        { to: '/admin', label: 'Overview', icon: LayoutDashboard },
+        { to: '/admin/projects', label: 'Project', icon: FolderKanban },
+        { to: '/admin/documents', label: 'Dokumen', icon: FileText },
+        { to: '/admin/users', label: 'Pengguna', icon: Users },
+      ];
+    }
+    return [
+      { to: '/app', label: 'Overview', icon: LayoutDashboard },
+      { to: '/app/projects', label: 'Project', icon: FolderKanban },
+      { to: '/app/documents', label: 'Dokumen', icon: FileText },
+    ];
+  };
 
   const isLinkActive = (to: string) => {
-    if (to === '/app') {
-      return location.pathname === '/app';
+    if (to === '/app' || to === '/admin') {
+      return location.pathname === to;
     }
     return location.pathname === to || location.pathname.startsWith(`${to}/`);
   };
@@ -36,7 +46,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.to === '/'}
+            end={item.to === '/app' || item.to === '/admin'}
             className={`flex flex-col items-center justify-center min-w-[56px] min-h-[44px] py-1 px-2 rounded-lg text-[10px] font-medium transition-colors ${
               active
                 ? 'text-blue-600 dark:text-blue-400 font-semibold'
@@ -51,7 +61,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenMenu }) => {
 
       <button
         onClick={onOpenMenu}
-        className="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] py-1 px-2 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-900 transition-colors"
+        className="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] py-1 px-2 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
       >
         <Menu className="w-5 h-5 mb-0.5" />
         <span>Menu</span>

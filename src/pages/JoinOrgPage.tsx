@@ -79,12 +79,12 @@ export const JoinOrgPage: React.FC = () => {
       {/* Page Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-          Keanggotaan Organisasi
+          Keanggotaan Project
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
           {currentOrganization 
-            ? 'Informasi organisasi aktif dan status keanggotaan Anda.' 
-            : 'Pilih organisasi untuk mengakses repositori dokumen dan unggahan berkas RAG.'}
+            ? 'Informasi project aktif dan status keanggotaan Anda.' 
+            : 'Pilih project untuk mengakses repositori dokumen dan unggahan berkas RAG.'}
         </p>
       </div>
 
@@ -122,7 +122,7 @@ export const JoinOrgPage: React.FC = () => {
                     </h2>
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Organisasi Aktif Anda
+                      Project Aktif Anda
                     </span>
                   </div>
                   <p className="text-xs text-slate-300">
@@ -149,7 +149,7 @@ export const JoinOrgPage: React.FC = () => {
                   className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4 text-rose-400" />
-                  <span>Keluar Organisasi</span>
+                  <span>Keluar Project</span>
                 </button>
               </div>
             </div>
@@ -197,9 +197,9 @@ export const JoinOrgPage: React.FC = () => {
                 <Building2 className="w-4 h-4" />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Peraturan Keanggotaan Multi-Tenant KMS</p>
+                <p className="font-semibold text-slate-900 dark:text-white">Peraturan Keanggotaan Multi-Project KMS</p>
                 <p className="text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                  Setiap pengguna hanya dapat terdaftar pada satu organisasi aktif dalam satu waktu demi menjaga privasi dan isolasi repositori dokumen RAG organisasi. Untuk bergabung ke organisasi lain, silakan klik tombol <strong>Keluar Organisasi</strong> di atas terlebih dahulu.
+                  Setiap pengguna hanya dapat terdaftar pada satu project aktif dalam satu waktu demi menjaga privasi dan isolasi repositori dokumen RAG project. Untuk bergabung ke project lain, silakan klik tombol <strong>Keluar Project</strong> di atas terlebih dahulu.
                 </p>
               </div>
             </div>
@@ -215,10 +215,10 @@ export const JoinOrgPage: React.FC = () => {
             </div>
             <div>
               <h3 className="text-xs sm:text-sm font-bold text-amber-950">
-                Anda Belum Tergabung dalam Organisasi
+                Anda Belum Tergabung dalam Project
               </h3>
               <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                Pilih salah satu organisasi di bawah ini untuk mulai mengakses repositori berkas &amp; dokumen RAG.
+                Pilih salah satu project di bawah ini untuk mulai mengakses repositori berkas &amp; dokumen RAG.
               </p>
             </div>
           </div>
@@ -229,7 +229,7 @@ export const JoinOrgPage: React.FC = () => {
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Cari organisasi berdasarkan nama, kota, sektor, atau PIC admin..."
+                placeholder="Cari project berdasarkan nama, kota, sektor, atau PIC admin..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full text-xs pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
@@ -303,7 +303,7 @@ export const JoinOrgPage: React.FC = () => {
                       className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer group"
                     >
                       <UserPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                      <span>Gabung Organisasi</span>
+                      <span>Gabung Project</span>
                     </button>
                   </div>
                 </div>
@@ -312,7 +312,7 @@ export const JoinOrgPage: React.FC = () => {
           ) : (
             <div className="p-8 text-center bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Tidak ada organisasi yang cocok dengan pencarian "{searchQuery}".
+                Tidak ada project yang cocok dengan pencarian "{searchQuery}".
               </p>
             </div>
           )}
@@ -329,11 +329,11 @@ export const JoinOrgPage: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Keluar dari Organisasi?
+                  Keluar dari Project?
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   Apakah Anda yakin ingin keluar dari <strong className="text-slate-800 dark:text-slate-200">{currentOrganization.name}</strong>? 
-                  Anda tidak akan dapat lagi mengakses repositori dokumen dan berkas RAG organisasi ini sampai Anda bergabung kembali.
+                  Anda tidak akan dapat lagi mengakses repositori dokumen dan berkas RAG project ini sampai Anda bergabung kembali.
                 </p>
               </div>
             </div>
@@ -352,7 +352,7 @@ export const JoinOrgPage: React.FC = () => {
                 className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-xs flex items-center gap-1.5"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>Ya, Keluar Organisasi</span>
+                <span>Ya, Keluar Project</span>
               </button>
             </div>
           </div>

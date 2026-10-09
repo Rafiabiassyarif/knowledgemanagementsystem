@@ -23,7 +23,7 @@ export interface QueuedFile {
   file: File;
   title: string;
   category: DocumentCategory;
-  repositoryType: 'document' | 'photo' | 'knowledge';
+  repositoryType: 'document' | 'photo';
   year: number;
   fileType: string;
   fileSizeKb: number;
@@ -47,7 +47,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
-  const [defaultRepoType, setDefaultRepoType] = useState<'document' | 'photo' | 'knowledge'>('document');
+  const [defaultRepoType, setDefaultRepoType] = useState<'document' | 'photo'>('document');
   const [defaultCategory, setDefaultCategory] = useState<DocumentCategory>('SOP & Prosedur');
   const [defaultYear, setDefaultYear] = useState<number>(new Date().getFullYear());
   const [globalNotes, setGlobalNotes] = useState('');
@@ -78,7 +78,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     };
   }, []);
 
-  const detectType = (filename: string): { type: string; repo: 'document' | 'photo' | 'knowledge' } => {
+  const detectType = (filename: string): { type: string; repo: 'document' | 'photo' } => {
     const ext = filename.split('.').pop()?.toUpperCase() || '';
     if (['JPG', 'JPEG', 'PNG', 'WEBP', 'GIF', 'SVG'].includes(ext)) {
       return { type: ext, repo: 'photo' };
@@ -86,8 +86,8 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     if (ext === 'PDF') return { type: 'PDF', repo: 'document' };
     if (['DOC', 'DOCX'].includes(ext)) return { type: 'DOCX', repo: 'document' };
     if (['XLS', 'XLSX'].includes(ext)) return { type: 'XLSX', repo: 'document' };
-    if (['TXT', 'CSV', 'MD'].includes(ext)) return { type: 'TXT', repo: 'knowledge' };
-    return { type: ext || 'FILE', repo: defaultRepoType };
+    if (['TXT', 'CSV', 'MD'].includes(ext)) return { type: 'TXT', repo: 'document' };
+    return { type: ext || 'FILE', repo: defaultRepoType === 'photo' ? 'photo' : 'document' };
   };
 
   const addFilesToQueue = (files: FileList | File[]) => {
@@ -158,7 +158,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     setQueuedFiles(prev => prev.map(item => item.id === id ? { ...item, title: newTitle } : item));
   };
 
-  const updateFileRepo = (id: string, newRepo: 'document' | 'photo' | 'knowledge') => {
+  const updateFileRepo = (id: string, newRepo: 'document' | 'photo') => {
     setQueuedFiles(prev => prev.map(item => item.id === id ? { ...item, repositoryType: newRepo } : item));
   };
 
@@ -166,7 +166,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     setQueuedFiles(prev => prev.map(item => item.id === id ? { ...item, category: newCat } : item));
   };
 
-  const handleRepoTypeSelect = (repo: 'document' | 'photo' | 'knowledge') => {
+  const handleRepoTypeSelect = (repo: 'document' | 'photo') => {
     setDefaultRepoType(repo);
     if (queuedFiles.length > 0) {
       setQueuedFiles(prev => prev.map(item => ({ ...item, repositoryType: repo })));
@@ -416,22 +416,22 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Pilihan Repositori Tujuan *
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleRepoTypeSelect('document')}
                 className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
-                  defaultRepoType === 'document'
+                  defaultRepoType !== 'photo'
                     ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 ring-2 ring-blue-500/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                <div className={`p-2 rounded-lg ${defaultRepoType === 'document' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                <div className={`p-2 rounded-lg ${defaultRepoType !== 'photo' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
                   <FileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="font-bold text-xs">Dokumen / PDF</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500">Surat resmi & regulasi</div>
+                  <div className="font-bold text-xs">Dokumen</div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500">PDF, Word, Excel, Surat & Regulasi</div>
                 </div>
               </button>
 
@@ -449,25 +449,7 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                 </div>
                 <div>
                   <div className="font-bold text-xs">Foto & Media</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500">Dokumentasi & gambar</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleRepoTypeSelect('knowledge')}
-                className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
-                  defaultRepoType === 'knowledge'
-                    ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-500/20'
-                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <div className={`p-2 rounded-lg ${defaultRepoType === 'knowledge' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-xs">Knowledge Base</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500">Basis pengetahuan & SOP</div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500">Dokumentasi, Infografis & Gambar</div>
                 </div>
               </button>
             </div>
@@ -544,13 +526,12 @@ export const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                         <span className="text-slate-300 dark:text-slate-700">·</span>
                         {/* Inline Repo Switch */}
                         <select
-                          value={item.repositoryType}
+                          value={item.repositoryType === 'photo' ? 'photo' : 'document'}
                           onChange={(e) => updateFileRepo(item.id, e.target.value as any)}
                           className="text-[10px] rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 focus:outline-none cursor-pointer"
                         >
-                          <option value="document">Dokumen / PDF</option>
+                          <option value="document">Dokumen</option>
                           <option value="photo">Foto & Media</option>
-                          <option value="knowledge">Knowledge Base</option>
                         </select>
                       </div>
 

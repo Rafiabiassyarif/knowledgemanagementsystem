@@ -266,6 +266,16 @@ async function handleFileRequest(
     }
   }
 
+  // Catat metrik penggunaan dokumen & log akses AI RAG
+  for (const doc of docsToShow) {
+    p.query('UPDATE documents SET usage_count = COALESCE(usage_count, 0) + 1, last_accessed_at = NOW() WHERE id = ?', [doc.id]).catch(() => {});
+    const logId = `log-ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    p.query(
+      'INSERT INTO document_logs (id, document_id, organization_id, user_name, user_role, action_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [logId, doc.id, doc.organization_id || null, 'AI RAG Assistant', 'system', 'ai_query', `Dirujuk langsung dalam obrolan AI: "${query.slice(0, 60)}"`]
+    ).catch(() => {});
+  }
+
   let answer = '';
   if (isFallback) {
     answer = `Berkas atau dokumen dengan kata kunci *" ${query} "* tidak ditemukan secara spesifik di repositori **${orgName}**.\n\n` +
@@ -386,6 +396,16 @@ router.post('/query', async (req: Request, res: Response): Promise<void> => {
             if (imageAtts.length > 0 && !result.answer.includes('![')) {
               const imgMarkdown = imageAtts.map((img: any) => `\n\n🖼️ **${img.title}**\n![${img.title}](${img.url})\n🔗 [Buka / Unduh Foto Asli](${img.url})`).join('\n');
               result.answer += imgMarkdown;
+            }
+
+            // Catat metrik penggunaan dokumen & log akses AI RAG
+            p.query('UPDATE documents SET usage_count = COALESCE(usage_count, 0) + 1, last_accessed_at = NOW() WHERE id IN (?)', [srcDocIds]).catch(() => {});
+            for (const sDocId of srcDocIds) {
+              const logId = `log-rag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+              p.query(
+                'INSERT INTO document_logs (id, document_id, organization_id, user_name, user_role, action_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [logId, sDocId, organizationId || null, 'AI RAG Engine', 'system', 'ai_query', `Dijadikan sumber acuan jawaban AI: "${query.trim().slice(0, 60)}"`]
+              ).catch(() => {});
             }
           }
         } catch (attErr) {

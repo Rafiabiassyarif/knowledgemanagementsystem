@@ -112,7 +112,7 @@ export const OrganizationDetailPage: React.FC = () => {
       {/* Back button & Title lockup */}
       <div>
         <Link 
-          to="/app/projects" 
+          to={currentUser?.role === 'admin' ? '/admin/projects' : '/app/projects'} 
           className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors mb-2"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -215,7 +215,7 @@ export const OrganizationDetailPage: React.FC = () => {
           {/* Org Profile Summary */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs space-y-4">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Profil & Mandat Organisasi</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Profil & Mandat Project</h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-lg border border-slate-100 dark:border-slate-700/60">
                 {org.description}
               </p>
@@ -609,7 +609,7 @@ print(res.json()["data"]["answer"])`}</pre>
       {/* TAB 4: ACTIVITY */}
       {activeTab === 'activity' && (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Riwayat Log Organisasi</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Riwayat Log Project</h3>
           <div className="space-y-3">
             {orgLogs.map((log) => (
               <div key={log.id} className="text-xs flex items-start gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
@@ -630,17 +630,17 @@ print(res.json()["data"]["answer"])`}</pre>
       {/* TAB 6: SETTINGS */}
       {activeTab === 'settings' && (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 max-w-2xl space-y-4">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Pengaturan Organisasi</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Pengaturan Project</h3>
           {saveSuccess && (
             <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              Perubahan profil organisasi berhasil disimpan.
+              Perubahan profil project berhasil disimpan.
             </div>
           )}
 
           <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Nama Organisasi</label>
+              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Nama Project</label>
               <input
                 type="text"
                 disabled
@@ -682,7 +682,7 @@ print(res.json()["data"]["answer"])`}</pre>
                 <h4 className="text-xs font-semibold uppercase tracking-wider">Zona Berbahaya</h4>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                Menghapus organisasi akan menghapus seluruh repositori dokumen, indeks AI, dan keanggotaan. {currentUser?.role === 'admin' ? 'Setelah dihapus, kuota pembuatan organisasi Anda akan direset (0/1) sehingga Anda dapat membuat 1 organisasi baru lagi.' : ''}
+                Menghapus project akan menghapus seluruh repositori dokumen, indeks AI, dan keanggotaan. {currentUser?.role === 'admin' ? 'Setelah dihapus, kuota pembuatan project Anda akan direset (0/1) sehingga Anda dapat membuat 1 project baru lagi.' : ''}
               </p>
               <button
                 type="button"
@@ -690,7 +690,7 @@ print(res.json()["data"]["answer"])`}</pre>
                 className="px-3.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Hapus Organisasi {org.name}</span>
+                <span>Hapus Project {org.name}</span>
               </button>
             </div>
           )}
@@ -707,14 +707,14 @@ print(res.json()["data"]["answer"])`}</pre>
 
             <div className="text-center space-y-1.5">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Hapus Organisasi {org.name}?
+                Hapus Project {org.name}?
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                Tindakan ini tidak dapat dibatalkan. Seluruh data organisasi dan dokumen SOP akan dihapus secara permanen.
+                Tindakan ini tidak dapat dibatalkan. Seluruh data project dan dokumen SOP akan dihapus secara permanen.
               </p>
               {currentUser?.role === 'admin' && (
                 <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 text-left mt-2 leading-relaxed">
-                  <strong>Reset Kuota 1 Organisasi:</strong> Kuota akun Admin Anda akan direset kembali menjadi <strong>0/1</strong>, dan Anda dapat <strong>langsung membuat 1 organisasi baru</strong>.
+                  <strong>Reset Kuota 1 Project:</strong> Kuota akun Admin Anda akan direset kembali menjadi <strong>0/1</strong>, dan Anda dapat <strong>langsung membuat 1 project baru</strong>.
                 </div>
               )}
             </div>
@@ -737,7 +737,7 @@ print(res.json()["data"]["answer"])`}</pre>
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Ya, Hapus Organisasi</span>
+                <span>Ya, Hapus Project</span>
               </button>
             </div>
           </div>

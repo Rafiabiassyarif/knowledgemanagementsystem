@@ -286,6 +286,22 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ organizationId }),
       }),
+    getLogs: (id: string) =>
+      request<{
+        success: boolean;
+        documentId: string;
+        documentTitle: string;
+        metrics: { viewCount: number; usageCount: number; lastAccessedAt: string | null };
+        logs: any[];
+      }>(`/documents/${id}/logs`),
+    logAccess: (id: string, data: { actionType?: 'view' | 'ai_query' | 'download' | 'preview'; notes?: string }) =>
+      request<{
+        success: boolean;
+        metrics: { viewCount: number; usageCount: number; lastAccessedAt: string | null };
+      }>(`/documents/${id}/log-access`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   // 5. Activity Logs API

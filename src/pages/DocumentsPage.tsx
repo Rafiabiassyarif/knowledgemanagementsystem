@@ -177,12 +177,12 @@ export const DocumentsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto shrink-0">
           <button
             type="button"
             onClick={handleSyncRag}
             disabled={isSyncingRag}
-            className="group inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50"
+            className="flex-1 sm:flex-initial group inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-semibold shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             title="Sinkronkan dengan RAG: otomatis menghapus dokumen lokal & CDN bila telah dihapus di https://rag.aiones.app/"
           >
             <RefreshCw className={`w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 ${isSyncingRag ? 'animate-spin' : ''}`} />
@@ -192,7 +192,7 @@ export const DocumentsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setUploadModalOpen(true)}
-            className="group inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+            className="flex-1 sm:flex-initial group inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all duration-200 cursor-pointer whitespace-nowrap"
           >
             <UploadCloud className="w-4 h-4 text-white shrink-0 group-hover:-translate-y-0.5 transition-transform duration-200" />
             <span className="tracking-tight font-semibold">Unggah Multi-Berkas</span>
@@ -325,10 +325,10 @@ export const DocumentsPage: React.FC = () => {
       </div>
 
       {/* 4. Filter and Search Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Search Input */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative min-w-0">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -339,8 +339,8 @@ export const DocumentsPage: React.FC = () => {
             />
           </div>
 
-          {/* View Mode Toggle */}
-          <div className="hidden sm:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+          {/* View Mode Toggle - Tersedia responsif di semua perangkat */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
             <button
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs font-semibold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
@@ -360,9 +360,9 @@ export const DocumentsPage: React.FC = () => {
 
         {/* Dropdown Filters */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 font-medium mr-1">
+          <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 font-medium mr-1 shrink-0">
             <Filter className="w-3.5 h-3.5" />
-            <span>Filter:</span>
+            <span className="hidden sm:inline">Filter:</span>
           </div>
 
           {/* Org Filter untuk Admin */}
@@ -370,7 +370,7 @@ export const DocumentsPage: React.FC = () => {
             <select
               value={selectedOrgFilter}
               onChange={(e) => setSelectedOrgFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs cursor-pointer max-w-[130px] sm:max-w-none truncate"
             >
               <option value="all">Semua Proyek</option>
               {organizations.map(org => (
@@ -383,7 +383,7 @@ export const DocumentsPage: React.FC = () => {
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs cursor-pointer"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs cursor-pointer max-w-[130px] sm:max-w-none truncate"
           >
             <option value="all">Semua Kategori</option>
             {categories.map(c => (
@@ -395,7 +395,7 @@ export const DocumentsPage: React.FC = () => {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs cursor-pointer"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 text-xs cursor-pointer"
           >
             <option value="all">Semua Tahun</option>
             {years.map(y => (
@@ -403,45 +403,46 @@ export const DocumentsPage: React.FC = () => {
             ))}
           </select>
 
-          <span className="ml-auto text-slate-400 dark:text-slate-500 tabular-nums text-xs">
+          <span className="w-full sm:w-auto text-left sm:text-right sm:ml-auto text-slate-400 dark:text-slate-500 tabular-nums text-xs pt-1 sm:pt-0">
             Menampilkan <strong className="text-slate-700 dark:text-slate-300">{filteredDocs.length}</strong> dokumen
           </span>
         </div>
       </div>
 
       {/* 5. Content View: Table */}
-      {viewMode === 'table' ? (
-        <div className="hidden sm:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
+      {viewMode === 'table' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto w-full scroll-smooth touch-pan-x">
+            <table className="w-full text-left border-collapse min-w-[780px]">
             <thead>
               <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/80 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-4">Judul Dokumen & Berkas</th>
-                <th className="py-3 px-4">Kategori</th>
-                <th className="py-3 px-4">Proyek / Sumber</th>
-                <th className="py-3 px-4 text-center">Tahun</th>
-                <th className="py-3 px-4 text-right">Ukuran</th>
-                <th className="py-3 px-4 text-center">Penggunaan & Logs</th>
-                <th className="py-3 px-4 text-center">Aksi</th>
+                <th className="py-3.5 px-4">Dokumen & Berkas</th>
+                <th className="py-3.5 px-4">Kategori</th>
+                <th className="py-3.5 px-4">Project</th>
+                <th className="py-3.5 px-4 text-center">Tahun</th>
+                <th className="py-3.5 px-4 text-right">Ukuran</th>
+                <th className="py-3.5 px-4 text-center">Penggunaan & AI</th>
+                <th className="py-3.5 px-4 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
               {filteredDocs.map((doc) => {
                 const isPhoto = isPhotoFile(doc);
                 return (
-                  <tr key={doc.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/60 transition-colors">
+                  <tr key={doc.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/60 transition-colors group">
                     {/* Title, thumbnail & preview */}
-                    <td className="py-3.5 px-4 max-w-sm">
+                    <td className="py-4 px-4 min-w-[260px] max-w-md">
                       <div 
                         onClick={() => setSelectedDocForViewer(doc)}
-                        className="cursor-pointer group flex items-start gap-3"
+                        className="cursor-pointer group/item flex items-start gap-3"
                       >
                         {isPhoto ? (
-                          <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group-hover:scale-105 transition-transform flex items-center justify-center relative">
+                          <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 group-hover/item:scale-105 group-hover/item:border-blue-400 transition-all flex items-center justify-center relative shadow-2xs">
                             <ImageIcon className="w-4 h-4 text-emerald-500 shrink-0" />
                             <img 
                               src={resolveDocumentImageUrl(doc)} 
                               alt={doc.title} 
-                              className="w-full h-full object-cover absolute inset-0 z-10" 
+                              className="w-full h-full object-cover absolute inset-0 z-10 group-hover/item:brightness-105 transition-all" 
                               onError={(e) => {
                                 const target = e.currentTarget;
                                 if (doc.cdnFileId && !target.src.includes('api-cdn.kroombox.com')) {
@@ -455,136 +456,129 @@ export const DocumentsPage: React.FC = () => {
                             />
                           </div>
                         ) : (
-                          <span className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 border group-hover:scale-105 transition-transform ${
+                          <span className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[10px] shrink-0 border group-hover/item:scale-105 transition-all shadow-2xs ${
                             doc.fileType === 'PDF'
-                              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 border-rose-200 dark:border-rose-900/60'
+                              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200/80 dark:border-rose-900/60 group-hover/item:border-rose-400'
                               : doc.fileType === 'DOCX' || doc.fileType === 'DOC'
-                                ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 border-blue-200 dark:border-blue-900/60'
+                                ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border-blue-200/80 dark:border-blue-900/60 group-hover/item:border-blue-400'
                                 : doc.fileType === 'XLSX' || doc.fileType === 'XLS'
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border-emerald-200 dark:border-emerald-900/60'
-                                  : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 border-indigo-200 dark:border-indigo-900/60'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-900/60 group-hover/item:border-emerald-400'
+                                  : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-900/60 group-hover/item:border-indigo-400'
                           }`}>
                             {doc.fileType || 'FILE'}
                           </span>
                         )}
 
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-900 dark:text-white group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors line-clamp-1 text-sm tracking-tight">
                               {doc.title}
                             </span>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                            <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 border ${
                               isPhoto
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60'
+                                : 'bg-blue-50 text-blue-700 border-blue-200/70 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/60'
                             }`}>
-                              {isPhoto ? 'Foto / Media' : 'Dokumen'}
+                              {isPhoto ? 'Foto & Media' : 'Dokumen'}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 line-clamp-1 mt-0.5">
-                            {doc.summary}
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
+                            {doc.summary || 'Tidak ada deskripsi'}
                           </p>
                         </div>
                       </div>
                     </td>
 
                     {/* Category */}
-                    <td className="py-3.5 px-4">
-                      <span className="text-slate-700 dark:text-slate-200 font-medium block">
+                    <td className="py-4 px-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
                         {doc.category}
                       </span>
                     </td>
 
                     {/* Project / Source */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 truncate max-w-xs">
-                        <FolderKanban className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                        <span className="truncate">{doc.organizationName || 'Proyek Utama'}</span>
+                    <td className="py-4 px-4 max-w-[170px]">
+                      <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                        <div className="w-6 h-6 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-200/40 dark:border-blue-900/40">
+                          <FolderKanban className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
+                          {doc.organizationName || 'Project Utama'}
+                        </span>
                       </div>
                     </td>
 
                     {/* Year */}
-                    <td className="py-3.5 px-4 text-center tabular-nums text-slate-600 dark:text-slate-300">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100/80 dark:bg-slate-800/80 text-[11px] font-mono font-medium text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50">
                         {doc.year}
                       </span>
                     </td>
 
                     {/* File Size & Status */}
-                    <td className="py-3.5 px-4 text-right tabular-nums">
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        {doc.fileSizeKb > 1024 
-                          ? `${(doc.fileSizeKb / 1024).toFixed(1)} MB` 
-                          : `${doc.fileSizeKb} KB`}
-                      </span>
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1 font-mono font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Tersimpan
-                      </span>
+                    <td className="py-4 px-4 text-right whitespace-nowrap">
+                      <div>
+                        <span className="font-semibold text-xs text-slate-900 dark:text-white font-mono block">
+                          {doc.fileSizeKb > 1024 
+                            ? `${(doc.fileSizeKb / 1024).toFixed(1)} MB` 
+                            : `${doc.fileSizeKb} KB`}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Tersimpan
+                        </span>
+                      </div>
                     </td>
 
                     {/* Penggunaan & Log Knowledge Base */}
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span 
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono text-[10px] font-semibold border border-blue-200/60 dark:border-blue-900/40" 
-                            title={`${doc.viewCount || 0} kali dilihat pengguna`}
-                          >
-                            <Eye className="w-3 h-3 text-blue-500" />
-                            {doc.viewCount || 0}x dilihat
-                          </span>
-                          <span 
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-mono text-[10px] font-semibold border border-indigo-200/60 dark:border-indigo-900/40" 
-                            title={`${doc.usageCount || 0} kali digunakan oleh AI RAG`}
-                          >
-                            <Sparkles className="w-3 h-3 text-indigo-500" />
-                            {doc.usageCount || 0}x AI
-                          </span>
-                        </div>
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedDocForLogs(doc);
                           }}
-                          className="text-[10px] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium inline-flex items-center gap-1 hover:underline cursor-pointer transition-colors"
+                          className="group/log inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-slate-200/80 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer shadow-2xs active:scale-95"
+                          title="Klik untuk membuka Riwayat Log & Analisis Akses"
                         >
-                          <Activity className="w-3 h-3 text-blue-500" />
-                          Riwayat Log
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 group-hover/log:text-blue-600 dark:group-hover/log:text-blue-400 transition-colors">
+                            <Eye className="w-3.5 h-3.5 text-blue-500" />
+                            {doc.viewCount || 0}x
+                          </span>
+                          <span className="w-px h-3 bg-slate-200 dark:bg-slate-700"></span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                            {doc.usageCount || 0}x AI
+                          </span>
+                          <Activity className="w-3 h-3 text-slate-400 group-hover/log:text-indigo-500 transition-colors ml-0.5" />
                         </button>
                       </div>
                     </td>
 
                     {/* Action buttons */}
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => setSelectedDocForLogs(doc)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                          title="Lihat Log Riwayat Penggunaan & Akses"
-                        >
-                          <Activity className="w-4 h-4" />
-                        </button>
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => setSelectedDocForViewer(doc)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-xl bg-blue-50/80 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white border border-blue-200/60 dark:border-blue-900/40 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                           title="Lihat Detail & Pratinjau Dokumen"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => setEditingDoc(doc)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Metadata Dokumen"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
                           onClick={() => handleDownloadDoc(doc)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600 dark:hover:text-white border border-emerald-200/60 dark:border-emerald-900/40 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                           title="Unduh Berkas"
                         >
                           <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingDoc(doc)}
+                          className="w-8 h-8 rounded-xl bg-amber-50/80 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white border border-amber-200/60 dark:border-amber-900/40 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                          title="Edit Metadata Dokumen"
+                        >
+                          <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => {
@@ -592,7 +586,7 @@ export const DocumentsPage: React.FC = () => {
                               deleteDocument(doc.id);
                             }
                           }}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-xl bg-rose-50/80 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white dark:hover:bg-rose-600 dark:hover:text-white border border-rose-200/60 dark:border-rose-900/40 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                           title="Hapus Berkas"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -604,11 +598,13 @@ export const DocumentsPage: React.FC = () => {
               })}
             </tbody>
           </table>
+          </div>
         </div>
-      ) : null}
+      )}
 
-      {/* 6. Grid View & Mobile Card View */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 ${viewMode === 'table' ? 'sm:hidden' : ''}`}>
+      {/* 6. Grid View */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
         {filteredDocs.map((doc) => {
           const isPhoto = isPhotoFile(doc);
           return (
@@ -715,13 +711,6 @@ export const DocumentsPage: React.FC = () => {
 
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setSelectedDocForLogs(doc)}
-                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                      title="Lihat Log Riwayat Penggunaan & Akses"
-                    >
-                      <Activity className="w-4 h-4" />
-                    </button>
-                    <button
                       onClick={() => setEditingDoc(doc)}
                       className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                       title="Edit Metadata Dokumen"
@@ -759,6 +748,7 @@ export const DocumentsPage: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {/* 7. Empty State */}
       {filteredDocs.length === 0 && (

@@ -45,10 +45,10 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h3 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
-            {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
+            {subtitle && <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
@@ -60,7 +60,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(88vh-80px)] text-slate-800 dark:text-slate-200">
+        <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(88vh-80px)] text-slate-800 dark:text-slate-200">
           {children}
         </div>
       </div>

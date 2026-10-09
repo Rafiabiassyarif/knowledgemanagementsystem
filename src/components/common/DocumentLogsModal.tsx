@@ -125,13 +125,13 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/40">
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-3 sm:gap-4 bg-slate-50/50 dark:bg-slate-800/40">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
@@ -141,12 +141,12 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
                 {doc.organizationName || 'Proyek'} · {doc.category}
               </span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+            <h3 className="text-sm sm:text-base md:text-lg font-bold text-slate-900 dark:text-white truncate">
               {doc.title}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-blue-500" />
-              Log Riwayat Penggunaan & Audit Akses Knowledge Base
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span>Log Riwayat Penggunaan & Audit Akses Knowledge Base</span>
             </p>
           </div>
 
@@ -154,14 +154,14 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
             <button
               onClick={loadLogs}
               disabled={loading}
-              className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               title="Perbarui Log"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               title="Tutup Modal"
             >
               <X className="w-5 h-5" />
@@ -170,9 +170,9 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
         </div>
 
         {/* 3 Metric Summary Cards */}
-        <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="p-3.5 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           {/* 1. Total Dilihat */}
-          <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex items-center gap-3">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Eye className="w-5 h-5" />
             </div>
@@ -187,7 +187,7 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
           </div>
 
           {/* 2. Total Digunakan AI RAG */}
-          <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-center gap-3">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Sparkles className="w-5 h-5" />
             </div>
@@ -202,7 +202,7 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
           </div>
 
           {/* 3. Terakhir Diakses */}
-          <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 flex items-center gap-3">
+          <div className="p-3 sm:p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Clock className="w-5 h-5" />
             </div>
@@ -218,11 +218,11 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
         </div>
 
         {/* Filter Navigation Tabs */}
-        <div className="px-5 pt-3 pb-2 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/60">
-          <div className="flex items-center gap-1.5 overflow-x-auto text-xs py-0.5">
+        <div className="px-3.5 sm:px-5 pt-3 pb-2 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/60">
+          <div className="flex items-center gap-1.5 overflow-x-auto text-xs py-0.5 no-scrollbar scroll-smooth">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 ${
                 filterType === 'all'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -232,7 +232,7 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
             </button>
             <button
               onClick={() => setFilterType('view')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 shrink-0 ${
                 filterType === 'view'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -242,7 +242,7 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
             </button>
             <button
               onClick={() => setFilterType('ai_query')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 shrink-0 ${
                 filterType === 'ai_query'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -252,7 +252,7 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
             </button>
             <button
               onClick={() => setFilterType('download')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 shrink-0 ${
                 filterType === 'download'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -262,13 +262,13 @@ export const DocumentLogsModal: React.FC<DocumentLogsModalProps> = ({
             </button>
           </div>
 
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline-block">
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline-block shrink-0 ml-2">
             {filteredLogs.length} riwayat tercatat
           </span>
         </div>
 
         {/* Log Entries List */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-2.5">
           {loading && logs.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
               <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-blue-500" />

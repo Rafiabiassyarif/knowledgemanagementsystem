@@ -10,22 +10,85 @@ export const openApiSpec = {
     title: 'KMS BUMD Multi-Tenant RAG & Knowledge Repository API',
     version: '2.0.0',
     description: `
-API Terbuka Knowledge Management System (KMS) BUMD bertenaga Multi-Tenant AI RAG, Manajemen Berkas Cloud, dan Audit Logging.
-Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran semantik bertenaga AI, chatbot cerdas, pelacakan riwayat akses dokumen, dan tata kelola multi-project BUMD ke dalam aplikasi pihak ketiga (Web Portal, Mobile App, Bot Telegram/WhatsApp, Sistem ERP).
+# KMS BUMD — API Repositori Dokumen & AI RAG
 
-### Fitur Utama API:
-1. **Multi-Tenant AI RAG**: Tanya jawab cerdas berbasis dokumen project bertenaga Llama 3 / Space Bunny Free dengan ground citation akurat.
-2. **Repositori Berkas & Media**: Penyimpanan aman dokumen (PDF, Word, Excel, Teks) dan foto dokumentasi visual terhubung ke Edge CDN.
-3. **Audit & Usage Logging (Baru)**: Pelacakan otomatis berapa kali dokumen dilihat, diunduh, dan digunakan oleh AI RAG.
-4. **Multi-Project**: Isolasi data antar project atau divisi operasional.
-5. **Autentikasi Ganda**: Mendukung Developer API Key (Header \`X-API-Key\`) dan JWT Session Token.
+API terbuka **Knowledge Management System (KMS) BUMD**: repositori dokumen multi-tenant,
+penelusuran semantik bertenaga AI, penyimpanan berkas di Edge CDN, dan audit trail aktivitas.
 
-### Cara Autentikasi:
-- **Developer API Key**:
-  - Header: \`X-API-Key: <kunci-rahasia-anda>\`
-- **JWT Session Token**:
-  - Dapatkan token via endpoint \`POST /api/auth/login\`
-  - Header: \`Authorization: Bearer <token_anda>\`
+Gunakan API ini untuk mengintegrasikan repositori dokumen & media BUMD ke aplikasi pihak ketiga
+— Web Portal, aplikasi mobile, bot Telegram/WhatsApp, maupun sistem ERP.
+
+---
+
+## Fitur Utama
+
+1. **Multi-Tenant AI RAG** — tanya jawab cerdas berbasis dokumen project, lengkap dengan rujukan sumber.
+2. **Repositori Berkas & Media** — penyimpanan aman PDF/Word/Excel/teks dan foto, terhubung ke Kroombox Edge CDN.
+3. **Audit & Usage Logging** — pelacakan otomatis berapa kali tiap dokumen dilihat, diunduh, dan dipakai AI.
+4. **Multi-Project** — isolasi data antar project/divisi. Satu akun hanya melihat project miliknya.
+5. **Autentikasi Ganda** — Bearer Token (JWT) atau Developer API Key.
+
+---
+
+## Autentikasi
+
+Semua endpoint terproteksi menerima salah satu dari:
+
+| Cara | Header | Keterangan |
+|---|---|---|
+| **Bearer Token** | Authorization: Bearer <token> | Token JWT dari POST /api/auth/login |
+| **Developer API Key** | X-API-Key: <kunci> | Kunci server, diatur via variabel lingkungan KMS_DEV_API_KEY |
+
+Tanpa keduanya, endpoint terproteksi menjawab **401**.
+Akun berperan user hanya dapat mengakses data project miliknya; peran admin dapat mengakses seluruh project.
+
+---
+
+## Mulai Cepat
+
+**1. Masuk dan ambil token**
+
+    POST https://ragkms.aiones.app/api/auth/login
+    Content-Type: application/json
+
+    { "email": "akun@contoh.id", "password": "sandi-anda" }
+
+Simpan nilai field token dari balasan, lalu kirim sebagai header pada permintaan berikutnya.
+
+**2. Lihat project milik Anda**
+
+    GET https://ragkms.aiones.app/api/organizations
+    Authorization: Bearer <token>
+
+**3. Lihat semua dokumen yang bisa Anda akses**
+
+    GET https://ragkms.aiones.app/api/documents?organizationId=all
+    Authorization: Bearer <token>
+
+**4. Unduh satu dokumen**
+
+    GET https://ragkms.aiones.app/api/documents/<documentId>/download
+    Authorization: Bearer <token>
+
+---
+
+## Format Balasan
+
+Semua endpoint mengembalikan JSON dengan penanda success, misalnya:
+
+    { "success": true, "documents": [ ... ] }
+
+Kode kesalahan standar: 400 permintaan tidak valid, 401 belum terautentikasi,
+403 tidak berwenang, 404 tidak ditemukan, 429 terlalu banyak percobaan login, 500 kesalahan server.
+
+---
+
+## Catatan Batasan
+
+- Ukuran maksimum satu berkas: 50 MB.
+- Percobaan login dibatasi 10 kali per 10 menit per alamat IP.
+- Jumlah project dan dokumen tidak dibatasi per akun.
+- Akun yang dibuat lewat login Google otomatis berperan user.
     `,
     contact: {
       name: 'Tim Developer KMS BUMD',
@@ -34,13 +97,29 @@ Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran s
   },
   servers: [
     {
-      url: 'http://localhost:5000',
-      description: 'Backend Server Langsung (Port 5000)'
+      url: 'https://ragkms.aiones.app',
+      description: 'Produksi (ragkms.aiones.app)'
+    },
+    {
+      url: 'http://localhost:5177',
+      description: 'Backend Server Langsung (Port 5177)'
     },
     {
       url: 'http://localhost:3000',
       description: 'Vite Proxy Gateway (Port 3000)'
     }
+  ],
+  tags: [
+    { name: 'Authentication & Profile', description: 'Masuk, daftar, profil, lupa sandi, dan login Google.' },
+    { name: 'Projects', description: 'Pengelolaan project/organisasi (ruang kerja multi-tenant).' },
+    { name: 'Documents & Repositories', description: 'Unggah, lihat, unduh, ubah, hapus dokumen & media.' },
+    { name: 'Document Access Logs & Audit', description: 'Pelacakan berapa kali dokumen dilihat/diunduh/dipakai AI.' },
+    { name: 'Users & Roles', description: 'Manajemen akun, peran, status, dan sandi pengguna.' },
+    { name: 'Activities & Analytics', description: 'Audit trail aktivitas dan statistik dashboard.' },
+    { name: 'CDN & Storage', description: 'Monitoring & pengelolaan berkas di Kroombox Edge CDN.' },
+    { name: 'Admin Platform', description: 'Konsol admin lintas-project (khusus peran admin).' },
+    { name: 'Join Requests', description: 'Permintaan bergabung/keluar project.' },
+    { name: 'AI RAG Chat', description: 'Tanya jawab cerdas berbasis dokumen project.' }
   ],
   components: {
     securitySchemes: {
@@ -835,42 +914,6 @@ Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran s
         }
       }
     },
-    '/api/users/{id}': {
-      put: {
-        summary: 'Perbarui Data Pengguna',
-        description: 'Mengubah nama, peran, divisi, atau status akun pengguna.',
-        tags: ['Users & Roles'],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'string' },
-            description: 'ID pengguna'
-          }
-        ],
-        responses: {
-          200: { description: 'Data pengguna berhasil diperbarui' }
-        }
-      },
-      delete: {
-        summary: 'Hapus Akun Pengguna (Admin Only)',
-        description: 'Menghapus akun pengguna dari sistem KMS.',
-        tags: ['Users & Roles'],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'string' },
-            description: 'ID pengguna'
-          }
-        ],
-        responses: {
-          200: { description: 'Pengguna berhasil dihapus' }
-        }
-      }
-    },
     '/api/users/{id}/eject': {
       post: {
         summary: 'Keluarkan Anggota dari Project',
@@ -1041,19 +1084,350 @@ Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran s
           }
         }
       }
+    },
+
+    '/api/auth/forgot-password': {
+      post: {
+        summary: 'Minta kode reset sandi',
+        description: 'Mengirim kode reset sandi ke email terdaftar. Jawaban sengaja selalu seragam agar tidak membocorkan apakah sebuah email terdaftar atau tidak.',
+        tags: ['Authentication & Profile'],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['email'], properties: { email: { type: 'string', format: 'email', example: 'demo1@bumd.id' } } } } } },
+        responses: {
+          200: { description: 'Permintaan diterima (jawaban seragam)', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean', example: true }, message: { type: 'string' } } } } } },
+          400: { description: 'Email tidak valid' }
+        }
+      }
+    },
+    '/api/auth/verify-reset-code': {
+      post: {
+        summary: 'Verifikasi kode reset sandi',
+        description: 'Memeriksa apakah kode reset valid dan belum kedaluwarsa (berlaku 60 menit, sekali pakai).',
+        tags: ['Authentication & Profile'],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['email', 'code'], properties: { email: { type: 'string', format: 'email' }, code: { type: 'string', example: 'a1b2c3d4' } } } } } },
+        responses: {
+          200: { description: 'Kode valid' },
+          400: { description: 'Kode salah / kedaluwarsa' }
+        }
+      }
+    },
+    '/api/auth/reset-password': {
+      post: {
+        summary: 'Tetapkan sandi baru dengan kode reset',
+        description: 'Mengganti kata sandi memakai kode reset yang valid. Kode langsung hangus setelah dipakai.',
+        tags: ['Authentication & Profile'],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['email', 'code', 'newPassword'], properties: { email: { type: 'string', format: 'email' }, code: { type: 'string' }, newPassword: { type: 'string', minLength: 6 } } } } } },
+        responses: {
+          200: { description: 'Sandi berhasil diubah' },
+          400: { description: 'Kode tidak valid / sandi terlalu pendek' }
+        }
+      }
+    },
+    '/api/auth/google/login': {
+      get: {
+        summary: 'Login / Daftar dengan Google (mulai OAuth)',
+        description: 'Mengalihkan browser ke halaman persetujuan Google. Hanya meminta scope identitas dasar (`openid email profile`) — tanpa akses Gmail. Akun yang belum terdaftar otomatis dibuat dengan peran **user**. Setelah sukses, browser diarahkan ke `/admin` (admin) atau `/app` (user).',
+        tags: ['Authentication & Profile'],
+        responses: {
+          302: { description: 'Pengalihan ke accounts.google.com' }
+        }
+      }
+    },
+    '/api/auth/google/connect': {
+      get: {
+        summary: 'Hubungkan akun Google pengirim email (khusus admin)',
+        description: 'Menghubungkan akun Gmail pengirim untuk fitur lupa sandi. Meminta scope `gmail.send` dan menyimpan refresh token ke konfigurasi server.',
+        tags: ['Authentication & Profile'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          302: { description: 'Pengalihan ke accounts.google.com' }
+        }
+      }
+    },
+    '/api/auth/google/callback': {
+      get: {
+        summary: 'Callback OAuth Google',
+        description: 'Endpoint callback yang dipanggil Google. Menukar kode otorisasi menjadi token, membaca email Google, lalu membuat/menemukan akun dan mengembalikan sesi aplikasi.',
+        tags: ['Authentication & Profile'],
+        parameters: [
+          { name: 'code', in: 'query', required: true, schema: { type: 'string' } },
+          { name: 'state', in: 'query', required: false, schema: { type: 'string', enum: ['login', 'connect'] } }
+        ],
+        responses: {
+          200: { description: 'Halaman HTML yang menyuntikkan sesi lalu mengalihkan ke aplikasi' },
+          400: { description: 'Kode otorisasi tidak ada / tidak valid' }
+        }
+      }
+    },
+
+    '/api/users/{id}/role': {
+      patch: {
+        summary: 'Ubah peran pengguna (admin)',
+        description: 'Menaikkan atau menurunkan peran akun menjadi `admin` atau `user`. Hanya admin.',
+        tags: ['Users & Roles'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'usr-1791512238310' }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['role'], properties: { role: { type: 'string', enum: ['admin', 'user'] } } } } } },
+        responses: {
+          200: { description: 'Peran berhasil diubah' },
+          403: { description: 'Bukan admin / peran tidak valid' },
+          404: { description: 'Pengguna tidak ditemukan' }
+        }
+      }
+    },
+    '/api/users/{id}/status': {
+      patch: {
+        summary: 'Suspend / aktifkan akun (admin)',
+        description: 'Mengubah status akun menjadi `active` atau `suspended`. Akun yang disuspend langsung kehilangan akses meski tokennya masih berlaku.',
+        tags: ['Users & Roles'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['status'], properties: { status: { type: 'string', enum: ['active', 'suspended'] } } } } } },
+        responses: { 200: { description: 'Status diperbarui' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/users/{id}/reset-password': {
+      patch: {
+        summary: 'Reset sandi pengguna (admin)',
+        description: 'Menetapkan kata sandi baru untuk akun mana pun tanpa perlu kode email. Hanya admin.',
+        tags: ['Users & Roles'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['newPassword'], properties: { newPassword: { type: 'string', minLength: 6 } } } } } },
+        responses: { 200: { description: 'Sandi akun diganti' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/users/{id}': {
+      put: {
+        summary: 'Perbarui profil pengguna',
+        description: 'Memperbarui nama/email sendiri, atau data lengkap bila pemanggil adalah admin. Field sensitif (peran, status, organisasi) hanya dapat diubah admin.',
+        tags: ['Users & Roles'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, email: { type: 'string', format: 'email' }, role: { type: 'string', enum: ['admin', 'user'] }, status: { type: 'string' }, organizationId: { type: 'string' } } } } } },
+        responses: {
+          200: { description: 'Data diperbarui' },
+          401: { description: 'Belum login' },
+          403: { description: 'Tidak berwenang mengubah akun ini' }
+        }
+      },
+      delete: {
+        summary: 'Hapus akun pengguna (admin)',
+        description: 'Menghapus akun beserta data terkait. Akun admin lain dan akun sendiri tidak dapat dihapus.',
+        tags: ['Users & Roles'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Akun dihapus permanen' },
+          400: { description: 'Tidak dapat menghapus akun sendiri' },
+          403: { description: 'Akun admin tidak dapat dihapus / bukan admin' }
+        }
+      }
+    },
+
+    '/api/activities/clear': {
+      delete: {
+        summary: 'Bersihkan riwayat log aktivitas (admin)',
+        description: 'Menghapus seluruh catatan log aktivitas. Hanya admin.',
+        tags: ['Activities & Analytics'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Riwayat dibersihkan' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/activities/{id}': {
+      delete: {
+        summary: 'Hapus satu catatan log (admin)',
+        description: 'Menghapus satu catatan log aktivitas berdasarkan id. Hanya admin.',
+        tags: ['Activities & Analytics'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'act-1791364170088' }],
+        responses: { 200: { description: 'Catatan dihapus' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+
+    '/api/documents/upgrade-plan': {
+      post: {
+        summary: 'Ubah paket & kuota dokumen pengguna',
+        description: 'Menetapkan paket pengguna beserta kuota dokumennya. Peta paket: `free` → 5, `pro` → 100, `enterprise` → 999999 (tak terbatas).',
+        tags: ['Documents & Repositories'],
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['userId', 'plan'], properties: { userId: { type: 'string', example: 'usr-1791512238310' }, plan: { type: 'string', enum: ['free', 'pro', 'enterprise'] } } } } } },
+        responses: { 200: { description: 'Paket diperbarui' }, 500: { description: 'Gagal memperbarui paket' } }
+      }
+    },
+    '/api/documents/reconcile-rag': {
+      post: {
+        summary: 'Sinkronkan jumlah chunk RAG (aman / dry-run)',
+        description: 'Menyelaraskan angka jumlah chunk tiap dokumen dengan nilai sebenarnya di layanan RAG. Bersifat **non-destruktif**: tidak menghapus dokumen maupun berkas CDN.',
+        tags: ['Documents & Repositories'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Hasil rekonsiliasi' }, 401: { description: 'Belum login' } }
+      }
+    },
+    '/api/documents/rag-webhook': {
+      post: {
+        summary: 'Webhook pemberitahuan penghapusan dokumen dari RAG',
+        description: 'Endpoint publik yang dipanggil layanan RAG bila sebuah dokumen dihapus di sisi RAG, agar catatan lokal dapat disesuaikan.',
+        tags: ['Documents & Repositories'],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { document_id: { type: 'string' }, knowledge_base_id: { type: 'string' } } } } } },
+        responses: { 200: { description: 'Webhook diproses' } }
+      }
+    },
+
+    '/api/organizations/{id}/toggle-status': {
+      patch: {
+        summary: 'Aktifkan / nonaktifkan proyek',
+        description: 'Mengubah status keaktifan sebuah proyek (`active` ↔ `inactive`).',
+        tags: ['Projects'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'org-1791512468512' }],
+        responses: { 200: { description: 'Status proyek diperbarui' }, 404: { description: 'Proyek tidak ditemukan' } }
+      }
+    },
+
+    '/api/cdn/health': {
+      get: {
+        summary: 'Status kesehatan Kroombox CDN',
+        description: 'Memeriksa apakah layanan CDN merespons dengan baik.',
+        tags: ['CDN & Storage'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Status CDN' } }
+      }
+    },
+    '/api/cdn/stats': {
+      get: {
+        summary: 'Statistik penyimpanan CDN',
+        description: 'Mengembalikan pemakaian penyimpanan (byte), kuota, bandwidth, dan jumlah aset di Kroombox CDN.',
+        tags: ['CDN & Storage'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Statistik CDN' } }
+      }
+    },
+    '/api/cdn/files': {
+      get: {
+        summary: 'Daftar berkas di CDN',
+        description: 'Menampilkan daftar berkas yang tersimpan di Kroombox CDN, dapat disaring dengan pencarian dan jumlah.',
+        tags: ['CDN & Storage'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'search', in: 'query', required: false, schema: { type: 'string' } },
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 50 } }
+        ],
+        responses: { 200: { description: 'Daftar berkas' } }
+      }
+    },
+    '/api/cdn/sign/{id}': {
+      post: {
+        summary: 'Buat URL bertanda tangan untuk berkas CDN',
+        description: 'Membuat tautan sementara bertanda tangan untuk mengakses sebuah berkas di CDN.',
+        tags: ['CDN & Storage'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'URL bertanda tangan' } }
+      }
+    },
+
+    '/api/admin/overview': {
+      get: {
+        summary: 'Ringkasan platform (admin)',
+        description: 'Statistik seluruh platform: jumlah project, dokumen, pengguna, serta status infrastruktur (database, CDN, mesin RAG). Hanya admin.',
+        tags: ['Admin Platform'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Ringkasan platform' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/admin/users': {
+      get: {
+        summary: 'Daftar seluruh pengguna + kuota (admin)',
+        description: 'Menampilkan setiap akun beserta paket, kuota dokumen, jumlah unggahan, dan organisasinya. Hanya admin.',
+        tags: ['Admin Platform'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Daftar pengguna dengan kuota' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/admin/users/{id}/quota': {
+      post: {
+        summary: 'Ubah paket & kuota seorang pengguna (admin)',
+        description: 'Menetapkan paket dan batas dokumen untuk satu akun. Hanya admin.',
+        tags: ['Admin Platform'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { plan: { type: 'string', enum: ['free', 'pro', 'enterprise'] }, docQuota: { type: 'integer', example: 50 } } } } } },
+        responses: { 200: { description: 'Kuota diperbarui' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/admin/organizations/{id}/status': {
+      post: {
+        summary: 'Ubah status proyek (admin)',
+        description: 'Mengaktifkan atau menonaktifkan sebuah proyek dari konsol admin.',
+        tags: ['Admin Platform'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['status'], properties: { status: { type: 'string', enum: ['active', 'inactive'] } } } } } },
+        responses: { 200: { description: 'Status proyek diperbarui' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+
+    '/api/join-requests': {
+      get: {
+        summary: 'Daftar permintaan bergabung',
+        description: 'Menampilkan permintaan bergabung ke proyek. Admin melihat seluruhnya; pengguna biasa hanya yang terkait dirinya.',
+        tags: ['Join Requests'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Daftar permintaan' } }
+      }
+    },
+    '/api/join-requests/join': {
+      post: {
+        summary: 'Ajukan bergabung ke proyek',
+        description: 'Mengirim permintaan bergabung ke sebuah proyek berdasarkan kode proyek.',
+        tags: ['Join Requests'],
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['organizationId'], properties: { organizationId: { type: 'string' }, message: { type: 'string' } } } } } },
+        responses: { 200: { description: 'Permintaan dikirim' }, 400: { description: 'Permintaan tidak valid / sudah pernah diajukan' } }
+      }
+    },
+    '/api/join-requests/{id}/approve': {
+      post: {
+        summary: 'Setujui permintaan bergabung (admin)',
+        description: 'Menyetujui permintaan sehingga pengguna menjadi anggota proyek.',
+        tags: ['Join Requests'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Permintaan disetujui' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/join-requests/{id}/reject': {
+      post: {
+        summary: 'Tolak permintaan bergabung (admin)',
+        description: 'Menolak permintaan bergabung ke proyek.',
+        tags: ['Join Requests'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Permintaan ditolak' }, 403: { description: 'Bukan admin' } }
+      }
+    },
+    '/api/join-requests/leave': {
+      post: {
+        summary: 'Keluar dari proyek',
+        description: 'Mengeluarkan diri sendiri dari keanggotaan sebuah proyek.',
+        tags: ['Join Requests'],
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['organizationId'], properties: { organizationId: { type: 'string' } } } } } },
+        responses: { 200: { description: 'Berhasil keluar dari proyek' } }
+      }
     }
   }
 };
 
 // Route 1: Serve OpenAPI Spec JSON
-// PENGAMAN: dokumentasi API tidak boleh publik — memandu penyerang memetakan endpoint.
-// Wajib login sebagai admin.
-swaggerRouter.get('/openapi.json', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
+// Dokumentasi API dibuka untuk publik (mitra/integrator). Tidak memuat kredensial apa pun;
+// seluruh endpoint di dalamnya tetap terproteksi (401 tanpa token).
+swaggerRouter.get('/openapi.json', (_req: Request, res: Response) => {
   res.json(openApiSpec);
 });
 
-// Route 2: Serve Standalone Swagger UI HTML (khusus admin yang sudah login)
-swaggerRouter.get('/docs', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
+// Route 2: Serve Standalone Swagger UI HTML (publik)
+swaggerRouter.get('/docs', (_req: Request, res: Response) => {
   const html = `<!DOCTYPE html>
 <html lang="id">
 <head>

@@ -294,6 +294,22 @@ async function createTables() {
     )
   `);
 
+  // 6b. API key per-pengguna (akses API tanpa sandi, bisa dicabut per kunci)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(64) NOT NULL,
+      label VARCHAR(120) NOT NULL DEFAULT 'default',
+      key_hash CHAR(64) NOT NULL,
+      key_prefix VARCHAR(24) NOT NULL,
+      last_used_at DATETIME NULL,
+      revoked_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_apikey_hash (key_hash),
+      INDEX idx_apikey_user (user_id)
+    )
+  `);
+
   // 7. Sanitasi URL berkas ke Kroombox Edge CDN dan penyesuaian tipe repositori foto
   try {
     await p.query(`

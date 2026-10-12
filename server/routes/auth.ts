@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { isMailConfigured, sendMail, resetPasswordEmail, resetPasswordOtpEmail, mailSender } from '../services/mailer';
-import { generateToken, requireAuth } from '../middleware/auth';
+import { generateToken, requireAuth, hashApiKey, generateApiKey } from '../middleware/auth';
 
 const router = Router();
 
@@ -634,6 +634,107 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
   } catch (err: any) {
     console.error('[GOOGLE OAUTH ERROR]', err);
     res.status(500).send('Gagal menyambungkan akun Google: ' + (err?.message || err));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// API KEY PER-PENGGUNA (akses API tanpa sandi, bisa dicabut satu per satu)
+// ---------------------------------------------------------------------------
+
+// Buat kunci API. Pengguna biasa untuk dirinya sendiri; admin boleh menyebut userId.
+router.post('/api-keys', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const actor = req.authUser!;
+    const { label, userId } = req.body || {};
+    const targetId = (userId && actor.role === 'admin') ? String(userId) : actor.id;
+
+    const p = getPool();
+    const [urows] = await p.query<any[]>('SELECT id, name, email, role FROM users WHERE id = ?', [targetId]);
+    if (urows.length === 0) {
+      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      return;
+    }
+
+    const raw = generateApiKey();
+    const id = `key-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    await p.query(
+      `INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix) VALUES (?, ?, ?, ?, ?)`,
+      [id, targetId, String(label || 'default').slice(0, 120), hashApiKey(raw), raw.slice(0, 14)]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Kunci API dibuat. Simpan sekarang — kunci ini hanya ditampilkan sekali.',
+      apiKey: raw,
+      key: { id, label: String(label || 'default'), prefix: raw.slice(0, 14), userId: targetId, user: urows[0] }
+    });
+  } catch (err: any) {
+    console.error('[CREATE API KEY ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal membuat kunci API.' });
+  }
+});
+
+// Daftar kunci milik sendiri (admin: seluruh kunci). Kunci mentah tidak pernah dikembalikan.
+router.get('/api-keys', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const actor = req.authUser!;
+    const p = getPool();
+    const where = actor.role === 'admin' ? '' : 'WHERE user_id = ?';
+    const params = actor.role === 'admin' ? [] : [actor.id];
+    const [rows] = await p.query<any[]>(
+      `SELECT id, user_id, label, key_prefix, last_used_at, revoked_at, created_at
+         FROM api_keys
+         ${where}
+        ORDER BY created_at DESC`,
+      params
+    );
+
+    // Ambil identitas pemilik kunci secara terpisah (hindari JOIN beda collation).
+    const ids = [...new Set(rows.map(r => r.user_id))];
+    const umap: Record<string, any> = {};
+    if (ids.length > 0) {
+      const [urows] = await p.query<any[]>(
+        `SELECT id, name, email FROM users WHERE id IN (${ids.map(() => '?').join(',')})`,
+        ids
+      );
+      for (const u of urows) umap[u.id] = u;
+    }
+
+    res.json({
+      success: true,
+      keys: rows.map(r => ({
+        id: r.id, userId: r.user_id,
+        userName: umap[r.user_id]?.name ?? null, userEmail: umap[r.user_id]?.email ?? null,
+        label: r.label, prefix: r.key_prefix,
+        lastUsedAt: r.last_used_at, revokedAt: r.revoked_at, createdAt: r.created_at,
+        active: !r.revoked_at
+      }))
+    });
+  } catch (err: any) {
+    console.error('[LIST API KEYS ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal memuat daftar kunci API.' });
+  }
+});
+
+// Cabut kunci API. Pemiliknya sendiri, atau admin.
+router.delete('/api-keys/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const actor = req.authUser!;
+    const p = getPool();
+    const [rows] = await p.query<any[]>('SELECT id, user_id FROM api_keys WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) {
+      res.status(404).json({ success: false, message: 'Kunci API tidak ditemukan.' });
+      return;
+    }
+    if (rows[0].user_id !== actor.id && actor.role !== 'admin') {
+      res.status(403).json({ success: false, message: 'Tidak berwenang mencabut kunci ini.' });
+      return;
+    }
+    await p.query('UPDATE api_keys SET revoked_at = NOW() WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Kunci API dicabut. Kunci itu langsung tidak bisa dipakai lagi.' });
+  } catch (err: any) {
+    console.error('[REVOKE API KEY ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mencabut kunci API.' });
   }
 });
 

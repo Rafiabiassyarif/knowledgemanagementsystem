@@ -36,8 +36,8 @@ Semua endpoint terproteksi menerima salah satu dari:
 
 | Cara | Header | Keterangan |
 |---|---|---|
+| **API Key per-pengguna** | X-API-Key: <kunci> | Dibuat via POST /api/auth/api-keys. Bisa dicabut kapan saja. **Cara yang disarankan untuk integrasi.** |
 | **Bearer Token** | Authorization: Bearer <token> | Token JWT dari POST /api/auth/login |
-| **Developer API Key** | X-API-Key: <kunci> | Kunci server, diatur via variabel lingkungan KMS_DEV_API_KEY |
 
 Tanpa keduanya, endpoint terproteksi menjawab **401**.
 Akun berperan user hanya dapat mengakses data project miliknya; peran admin dapat mengakses seluruh project.
@@ -1155,6 +1155,41 @@ Kode kesalahan standar: 400 permintaan tidak valid, 401 belum terautentikasi,
         responses: {
           200: { description: 'Halaman HTML yang menyuntikkan sesi lalu mengalihkan ke aplikasi' },
           400: { description: 'Kode otorisasi tidak ada / tidak valid' }
+        }
+      }
+    },
+
+    '/api/auth/api-keys': {
+      post: {
+        summary: 'Buat API key',
+        description: 'Menerbitkan kunci API untuk diakses tanpa login. Pengguna biasa membuat kunci untuk dirinya sendiri; admin boleh menyebut `userId` untuk akun lain. Kunci mentah hanya ditampilkan **sekali** pada balasan ini — simpan segera. Gunakan sebagai header `X-API-Key: <kunci>` atau `Authorization: Bearer <kunci>`.',
+        tags: ['Authentication & Profile'],
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { label: { type: 'string', example: 'integrasi-aoc' }, userId: { type: 'string', description: 'Hanya dihormati bila pemanggil admin' } } } } } },
+        responses: {
+          201: { description: 'Kunci dibuat', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, apiKey: { type: 'string', example: 'kms_ak_9f2c...' }, key: { type: 'object' } } } } } },
+          404: { description: 'Pengguna tidak ditemukan' }
+        }
+      },
+      get: {
+        summary: 'Daftar API key',
+        description: 'Menampilkan kunci milik sendiri (admin: seluruh kunci). Hanya metadata — kunci mentah tidak pernah dikembalikan lagi.',
+        tags: ['Authentication & Profile'],
+        security: [{ BearerAuth: [] }],
+        responses: { 200: { description: 'Daftar kunci beserta status aktif/dicabut dan pemakaian terakhir' } }
+      }
+    },
+    '/api/auth/api-keys/{id}': {
+      delete: {
+        summary: 'Cabut API key',
+        description: 'Mencabut kunci sehingga langsung tidak bisa dipakai lagi. Pemiliknya sendiri, atau admin.',
+        tags: ['Authentication & Profile'],
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'key-1791512238310-a1b2c3' }],
+        responses: {
+          200: { description: 'Kunci dicabut' },
+          403: { description: 'Tidak berwenang mencabut kunci ini' },
+          404: { description: 'Kunci tidak ditemukan' }
         }
       }
     },

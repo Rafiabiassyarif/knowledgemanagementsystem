@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 
+import { requireAuth, requireRole } from '../middleware/auth';
+
 export const swaggerRouter = Router();
 
 export const openApiSpec = {
@@ -20,7 +22,7 @@ Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran s
 
 ### Cara Autentikasi:
 - **Developer API Key**:
-  - Header: \`X-API-Key: kms_dev_live_7x89q2k4m1n5p0\`
+  - Header: \`X-API-Key: <kunci-rahasia-anda>\`
 - **JWT Session Token**:
   - Dapatkan token via endpoint \`POST /api/auth/login\`
   - Header: \`Authorization: Bearer <token_anda>\`
@@ -46,7 +48,7 @@ Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran s
         type: 'apiKey',
         in: 'header',
         name: 'X-API-Key',
-        description: 'Developer API Key (Default: `kms_dev_live_7x89q2k4m1n5p0`)'
+        description: 'Developer API Key (diatur via variabel lingkungan KMS_DEV_API_KEY)'
       },
       BearerAuth: {
         type: 'http',
@@ -1044,12 +1046,14 @@ Gunakan API ini untuk mengintegrasikan repositori dokumen & media, penelusuran s
 };
 
 // Route 1: Serve OpenAPI Spec JSON
-swaggerRouter.get('/openapi.json', (_req: Request, res: Response) => {
+// PENGAMAN: dokumentasi API tidak boleh publik — memandu penyerang memetakan endpoint.
+// Wajib login sebagai admin.
+swaggerRouter.get('/openapi.json', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
   res.json(openApiSpec);
 });
 
-// Route 2: Serve Standalone Swagger UI HTML
-swaggerRouter.get('/docs', (_req: Request, res: Response) => {
+// Route 2: Serve Standalone Swagger UI HTML (khusus admin yang sudah login)
+swaggerRouter.get('/docs', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
   const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -1345,7 +1349,7 @@ swaggerRouter.get('/docs', (_req: Request, res: Response) => {
       <div class="auth-pills-row">
         <div class="key-badge">
           <span>Header API Key:</span>
-          <strong>kms_dev_live_7x89q2k4m1n5p0</strong>
+          <strong>•••••••• (disimpan di server, tidak ditampilkan)</strong>
         </div>
         <div class="chip-feature">
           <span>✨ Multi-Tenant AI RAG</span>

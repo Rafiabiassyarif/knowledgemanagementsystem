@@ -1,12 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import fetch from 'node-fetch';
+import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 
+// PENGAMAN: seluruh endpoint /api/admin WAJIB login & berperan admin.
+// Sebelumnya route di sini tidak memeriksa peran sama sekali.
+router.use(requireAuth, requireRole('admin'));
+
 const CDN_BASE_URL = process.env.KROOMBOX_CDN_URL || 'https://api-cdn.kroombox.com';
-const CDN_API_KEY = process.env.KROOMBOX_API_KEY || 'kb_6365852fe432ce3a5b304b5bece7858cc3a558f5e5b84d0e';
-const CDN_JWT_TOKEN = process.env.KROOMBOX_JWT_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwcm9qZWN0SWQiOiIyMWM0MDQwZS1jYzhkLTQ3ZjctOTZhNC1jZmExM2Q4ZWExZjkiLCJ1c2VySWQiOjgsImlhdCI6MTc5MDg0MzIzNSwiZXhwIjoxNzk4NjE5MjM1fQ.VtMHS1Z5yWrJr65DN7NU6JFZLHBG5_PNtYhlt6EO5_k';
+// Kredensial CDN TIDAK boleh di-hardcode di kode sumber (bocor lewat repo publik).
+const CDN_API_KEY = process.env.KROOMBOX_API_KEY || '';
+const CDN_JWT_TOKEN = process.env.KROOMBOX_JWT_TOKEN || '';
 
 // 1. Get Admin Overview & Live CDN Stats
 router.get('/overview', async (_req: Request, res: Response): Promise<void> => {

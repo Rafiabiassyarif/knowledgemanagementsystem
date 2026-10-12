@@ -1,14 +1,19 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { getPool } from '../db';
-import { requireRole } from '../middleware/auth';
+import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 
 // 1. Get users (with optional organization filter)
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+// ISOLASI: admin melihat SEMUA akun; user biasa HANYA melihat dirinya sendiri &
+// rekan satu organisasi. Sebelumnya endpoint ini mengembalikan seluruh akun
+// platform ke siapa pun yang login (kebocoran data lintas-tenant).
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.query;
+    const actor = req.authUser!;
+    const isAdmin = actor.role === 'admin';
     const p = getPool();
 
     let query = `
@@ -17,10 +22,26 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       LEFT JOIN organizations o ON u.organization_id = o.id
     `;
     const params: any[] = [];
+    const conditions: string[] = [];
+
+    if (!isAdmin) {
+      // User biasa: hanya dirinya sendiri, atau rekan dalam organisasi yang sama.
+      if (actor.organizationId) {
+        conditions.push('(u.id = ? OR u.organization_id = ?)');
+        params.push(actor.id, actor.organizationId);
+      } else {
+        conditions.push('u.id = ?');
+        params.push(actor.id);
+      }
+    }
 
     if (organizationId && organizationId !== 'all') {
-      query += ' WHERE u.organization_id = ?';
+      conditions.push('u.organization_id = ?');
       params.push(organizationId);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
     }
 
     query += ' ORDER BY u.created_at DESC';
@@ -120,7 +141,11 @@ router.post('/', requireRole('admin'), async (req: Request, res: Response): Prom
 });
 
 // 3. Update user (self atau admin)
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+// 3. Update user profile
+// PENGAMAN: wajib login (sebelumnya tanpa requireAuth -> token palsu/anon bisa lolos).
+// Hanya diri sendiri atau admin yang boleh mengubah; field sensitif (role/status/
+// organisasi) hanya boleh diubah oleh admin.
+router.put('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const actor = req.authUser!;
@@ -191,7 +216,10 @@ router.patch('/:id/role', requireRole('admin'), async (req: Request, res: Respon
 });
 
 // 5. Eject member from organization
-router.post('/:id/eject', async (req: Request, res: Response): Promise<void> => {
+// 5. Eject user from organization — admin only
+// PENGAMAN: sebelumnya tanpa guard apa pun -> user biasa bisa mengeluarkan
+// anggota dari organisasi mana pun.
+router.post('/:id/eject', requireAuth, requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();

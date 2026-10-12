@@ -1,17 +1,32 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
+import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 
 // 1. Get activity logs (capped at 50 to optimize memory & storage)
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+// ISOLASI: admin melihat SEMUA log; user biasa HANYA log organisasinya sendiri.
+// Sebelumnya endpoint ini membocorkan 50 log lintas-tenant ke siapa pun yang login.
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId, type, search } = req.query;
+    const actor = req.authUser!;
     const p = getPool();
 
     let query = 'SELECT * FROM activity_logs';
     const params: any[] = [];
     const conditions: string[] = [];
+
+    if (actor.role !== 'admin') {
+      // User biasa: hanya log organisasinya (atau miliknya sendiri bila tanpa organisasi).
+      if (actor.organizationId) {
+        conditions.push('organization_id = ?');
+        params.push(actor.organizationId);
+      } else {
+        conditions.push('(actor_name = ? OR organization_id IS NULL)');
+        params.push(actor.name);
+      }
+    }
 
     if (organizationId && organizationId !== 'all') {
       conditions.push('organization_id = ?');

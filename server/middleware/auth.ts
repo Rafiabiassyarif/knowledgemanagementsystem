@@ -36,7 +36,10 @@ export function generateToken(user: AuthUserPayload): string {
   );
 }
 
-const DEV_API_KEY = process.env.KMS_DEV_API_KEY || 'kms_dev_live_7x89q2k4m1n5p0';
+// PENGAMAN: kunci API pengembang TIDAK boleh punya nilai default di kode.
+// Kunci default lama bocor di repo publik & dokumentasi /api/docs sehingga siapa pun
+// bisa memperoleh akses admin tanpa login. Kini hanya dari .env; bila kosong -> nonaktif.
+const DEV_API_KEY = (process.env.KMS_DEV_API_KEY || '').trim();
 
 /**
  * RequireAuth middleware: verifies Bearer JWT token OR Developer X-API-Key and attaches authUser.
@@ -49,7 +52,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     : (((req.query.token || req.query.auth_token) as string | undefined) || null);
 
   // 1. Direct Developer API Key authentication (via X-API-Key header or Bearer key)
-  if (apiKeyHeader === DEV_API_KEY || (token && token === DEV_API_KEY)) {
+  if (DEV_API_KEY && (apiKeyHeader === DEV_API_KEY || (token && token === DEV_API_KEY))) {
     req.authUser = {
       id: 'usr-developer',
       name: 'Developer API Client',

@@ -453,35 +453,43 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
 });
 
 // 3. Sambungkan akun Gmail pengirim / Login Google OAuth
-router.get('/google/connect', (_req: Request, res: Response): void => {
+// Bangun URL otorisasi Google (dipakai /google/connect & /google/login)
+function googleAuthUrl(extra: Record<string, string>): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID || '',
     redirect_uri: `${appBaseUrl()}/api/auth/google/callback`,
     response_type: 'code',
+    ...extra
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+// Hubungkan akun Google PENGIRIM email (butuh scope gmail.send) — untuk fitur lupa sandi.
+router.get('/google/connect', (_req: Request, res: Response): void => {
+  res.redirect(googleAuthUrl({
     scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
     access_type: 'offline',
     prompt: 'consent',
-    include_granted_scopes: 'true'
-  });
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+    include_granted_scopes: 'true',
+    state: 'connect'
+  }));
 });
 
+// Login / Daftar dengan Google.
+// PENGAMAN: HANYA meminta identitas dasar (openid email profile) — TANPA gmail.send.
+// Scope gmail.send tergolong "restricted" sehingga Google memblokir aplikasi yang belum
+// diverifikasi (penyebab error "Access blocked"). Scope itu hanya perlu di alur /google/connect.
 router.get('/google/login', (_req: Request, res: Response): void => {
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || '',
-    redirect_uri: `${appBaseUrl()}/api/auth/google/callback`,
-    response_type: 'code',
-    scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
-    access_type: 'offline',
-    prompt: 'consent',
-    include_granted_scopes: 'true'
-  });
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  res.redirect(googleAuthUrl({
+    scope: 'openid email profile',
+    state: 'login'
+  }));
 });
 
 router.get('/google/callback', async (req: Request, res: Response): Promise<void> => {
   try {
     const code = String(req.query.code || '');
+    const oauthState = String(req.query.state || 'login');
     if (!code) {
       res.status(400).send('Kode otorisasi Google tidak ditemukan.');
       return;
@@ -534,10 +542,17 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
       }
     }
 
-    const sender = userEmail || process.env.GMAIL_SENDER || 'gzzzefan@gmail.com';
+    // LOGIN wajib memakai email akun Google yang benar-benar dipakai login.
+    // JANGAN fallback ke GMAIL_SENDER — itu bisa membuat orang masuk sebagai akun tersebut.
+    if (!userEmail) {
+      res.status(400).send('Tidak dapat membaca email dari akun Google Anda. Silakan coba lagi.');
+      return;
+    }
+    const sender = userEmail;
 
-    // Simpan refresh token ke .env bila diterima
-    if (data.refresh_token) {
+    // Refresh token hanya disimpan pada alur HUBUNGKAN pengirim email (/google/connect),
+    // bukan pada alur login.
+    if (data.refresh_token && oauthState !== 'login') {
       saveEnv({
         GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
         GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
@@ -547,7 +562,9 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
       console.log(`[GOOGLE OAUTH OK] Refresh token tersimpan untuk pengirim: ${sender}`);
     }
 
-    // Buat atau temukan user di database MySQL
+    // Buat atau temukan user di database MySQL.
+    // PENGAMAN: akun baru dari Google WAJIB berperan 'user'. Sebelumnya nilai ini
+    // di-hardcode 'admin' sehingga siapa pun yang login Google langsung menjadi admin.
     const p = getPool();
     let [userRows] = await p.query<any[]>('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [sender]);
     let targetUser = userRows[0];
@@ -555,12 +572,21 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
       const newUserId = `usr-${Date.now()}`;
       const initials = (userName || sender).slice(0, 2).toUpperCase();
       await p.query(
-        `INSERT INTO users (id, name, email, role, status, avatar_initials, avatar_url) VALUES (?, ?, ?, 'admin', 'active', ?, ?)`,
+        `INSERT INTO users (id, name, email, password_hash, role, status, avatar_initials, avatar_url, org_join_status)
+         VALUES (?, ?, ?, NULL, 'user', 'active', ?, ?, 'none')`,
         [newUserId, userName || sender.split('@')[0], sender, initials, userPicture || null]
       );
       [userRows] = await p.query<any[]>('SELECT * FROM users WHERE id = ?', [newUserId]);
       targetUser = userRows[0];
+      console.log(`[GOOGLE LOGIN] Akun baru dibuat (role=user): ${sender}`);
     }
+
+    if (targetUser.status !== 'active') {
+      res.status(403).send('Akun Anda tidak aktif. Hubungi admin platform.');
+      return;
+    }
+
+    const redirectTarget = targetUser.role === 'admin' ? '/admin' : '/app';
 
     const appToken = generateToken({
       id: targetUser.id,
@@ -585,23 +611,23 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <title>Google Berhasil Terhubung</title>
+  <title>Login Google Berhasil</title>
   <script>
     localStorage.setItem('kms_auth_token', ${JSON.stringify(appToken)});
     localStorage.setItem('kms_current_user', ${JSON.stringify(userPayload)});
     setTimeout(function() {
-      window.location.href = '/app';
-    }, 1500);
+      window.location.href = ${JSON.stringify(redirectTarget)};
+    }, 1200);
   </script>
 </head>
 <body style="font-family:Segoe UI,Roboto,sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
   <div style="background:#1e293b;padding:36px;border-radius:24px;box-shadow:0 20px 35px rgba(0,0,0,0.4);text-align:center;max-width:440px;border:1px solid #334155;">
     <div style="width:60px;height:60px;background:#10b98120;border:1px solid #10b98140;color:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px;">✓</div>
-    <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;">Akun Google Berhasil Terhubung!</h2>
+    <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;">Berhasil Masuk dengan Google</h2>
     <p style="color:#94a3b8;font-size:14px;margin:0 0 20px;line-height:1.6;">
-      Akun <b>${sender}</b> telah aktif. Layanan email pemulihan lupa sandi dan login otomatis siap digunakan.
+      Akun <b>${sender}</b> aktif sebagai <b>${targetUser.role}</b>.
     </p>
-    <a href="/app" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 28px;border-radius:14px;">Masuk ke Aplikasi →</a>
+    <a href="${redirectTarget}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 28px;border-radius:14px;">Lanjut →</a>
   </div>
 </body>
 </html>`);

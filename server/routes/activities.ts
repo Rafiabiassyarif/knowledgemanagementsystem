@@ -18,12 +18,13 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     const conditions: string[] = [];
 
     if (actor.role !== 'admin') {
-      // User biasa: hanya log organisasinya (atau miliknya sendiri bila tanpa organisasi).
+      // User biasa: HANYA log organisasinya sendiri. User tanpa organisasi
+      // hanya melihat log yang ia sendiri buat (bukan log admin/platform).
       if (actor.organizationId) {
         conditions.push('organization_id = ?');
         params.push(actor.organizationId);
       } else {
-        conditions.push('(actor_name = ? OR organization_id IS NULL)');
+        conditions.push('actor_name = ?');
         params.push(actor.name);
       }
     }

@@ -5,9 +5,6 @@ import { cdnViewUrl } from '../services/cdn';
 
 const router = Router();
 
-// Kroombox Edge CDN API Key
-const CDN_API_KEY = process.env.KROOMBOX_API_KEY || 'kb_6365852fe432ce3a5b304b5bece7858cc3a558f5e5b84d0e';
-
 function formatOutOfContextResponse(query: string, orgName: string, docCount: number): string {
   const qLower = query.toLowerCase().trim();
 

@@ -71,8 +71,10 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   }
 });
 
-// 2. Clear all activity logs
-router.delete('/clear', async (req: Request, res: Response): Promise<void> => {
+// 2. Clear all activity logs (KHUSUS ADMIN)
+// PENGAMAN: sebelumnya tanpa cek peran -> siapa pun yang login bisa menjalankan
+// `DELETE FROM activity_logs` (menghapus SELURUH audit trail semua tenant).
+router.delete('/clear', requireAuth, requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.query;
     const p = getPool();
@@ -90,8 +92,8 @@ router.delete('/clear', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 3. Delete single activity log
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+// 3. Delete single activity log (KHUSUS ADMIN)
+router.delete('/:id', requireAuth, requireRole('admin'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const p = getPool();

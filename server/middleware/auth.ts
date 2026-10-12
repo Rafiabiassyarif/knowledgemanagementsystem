@@ -6,7 +6,17 @@ import { getPool } from '../db';
 
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'kms-bumd-dev-secret-change-me';
+// PENGAMAN: JANGAN pernah menuliskan kunci cadangan di kode. Kunci default
+// 'kms-bumd-dev-secret-change-me' ada di repo publik -> siapa pun bisa memalsukan
+// token admin bila .env kehilangan JWT_SECRET. Kini wajib dari .env; bila kosong,
+// server berhenti dengan jelas alih-alih diam-diam memakai kunci yang diketahui publik.
+const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
+if (!JWT_SECRET) {
+  throw new Error(
+    '[AUTH] JWT_SECRET belum diisi di .env. Server dihentikan demi keamanan — ' +
+    'isi JWT_SECRET dengan nilai acak yang panjang (mis. hasil `openssl rand -hex 32`).'
+  );
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface AuthUserPayload {

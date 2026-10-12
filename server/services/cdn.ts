@@ -7,9 +7,21 @@ const CDN_BASE_URL = process.env.KROOMBOX_CDN_URL || 'https://api-cdn.kroombox.c
 export function cdnViewUrl(fileId: string): string {
   return `${CDN_BASE_URL}/api/bridge/view/${encodeURIComponent(fileId)}`;
 }
-const CDN_API_KEY = process.env.KROOMBOX_API_KEY || 'kb_6365852fe432ce3a5b304b5bece7858cc3a558f5e5b84d0e';
-const CDN_JWT_TOKEN = process.env.KROOMBOX_JWT_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwcm9qZWN0SWQiOiIyMWM0MDQwZS1jYzhkLTQ3ZjctOTZhNC1jZmExM2Q4ZWExZjkiLCJ1c2VySWQiOjgsImlhdCI6MTc5MDg0MzIzNSwiZXhwIjoxNzk4NjE5MjM1fQ.VtMHS1Z5yWrJr65DN7NU6JFZLHBG5_PNtYhlt6EO5_k';
-const CDN_PROJECT_ID = process.env.KROOMBOX_PROJECT_ID || '21c4040e-cc8d-47f7-96a4-cfa13d8ea1f9';
+
+// PENGAMAN: kredensial CDN TIDAK boleh punya nilai default di kode (bocor di repo publik
+// sebelumnya). Kini wajib dari .env; fitur CDN nonaktif dengan pesan jelas bila kosong,
+// alih-alih diam-diam memakai kredensial proyek bersama yang diketahui publik.
+const CDN_API_KEY = (process.env.KROOMBOX_API_KEY || '').trim();
+const CDN_JWT_TOKEN = (process.env.KROOMBOX_JWT_TOKEN || '').trim();
+const CDN_PROJECT_ID = (process.env.KROOMBOX_PROJECT_ID || '').trim();
+
+function cdnConfigured(): boolean {
+  return Boolean(CDN_API_KEY && CDN_JWT_TOKEN && CDN_PROJECT_ID);
+}
+
+function cdnAuthHeaders(): Record<string, string> {
+  return { 'x-api-key': CDN_API_KEY, 'Authorization': `Bearer ${CDN_JWT_TOKEN}` };
+}
 
 export interface CdnUploadResult {
   fileId: string;
@@ -48,12 +60,13 @@ export async function getKroomboxCDNHealth(): Promise<any> {
  * Fetch Project CDN Live Stats (storage, bandwidth, quota)
  */
 export async function getKroomboxCDNStats(): Promise<CdnStatsResult | null> {
+  if (!cdnConfigured()) {
+    console.warn('[CDN] KROOMBOX_API_KEY/JWT_TOKEN/PROJECT_ID belum diisi di .env — statistik CDN dinonaktifkan.');
+    return null;
+  }
   try {
     const res = await fetch(`${CDN_BASE_URL}/api/bridge/stats`, {
-      headers: {
-        'x-api-key': CDN_API_KEY,
-        'Authorization': `Bearer ${CDN_JWT_TOKEN}`
-      }
+      headers: cdnAuthHeaders()
     });
     if (res.ok) {
       return await res.json();
@@ -69,6 +82,10 @@ export async function getKroomboxCDNStats(): Promise<CdnStatsResult | null> {
  * List files in project from Edge CDN
  */
 export async function listKroomboxCDNFiles(params?: { search?: string; type?: string; limit?: number }): Promise<any[]> {
+  if (!cdnConfigured()) {
+    console.warn('[CDN] KROOMBOX_API_KEY/JWT_TOKEN/PROJECT_ID belum diisi di .env — daftar berkas CDN dinonaktifkan.');
+    return [];
+  }
   try {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
@@ -77,10 +94,7 @@ export async function listKroomboxCDNFiles(params?: { search?: string; type?: st
 
     const url = `${CDN_BASE_URL}/api/bridge/files${query.toString() ? `?${query.toString()}` : ''}`;
     const res = await fetch(url, {
-      headers: {
-        'x-api-key': CDN_API_KEY,
-        'Authorization': `Bearer ${CDN_JWT_TOKEN}`
-      }
+      headers: cdnAuthHeaders()
     });
     if (res.ok) {
       return await res.json();
@@ -96,12 +110,15 @@ export async function listKroomboxCDNFiles(params?: { search?: string; type?: st
  * Create HMAC-SHA256 Signed delivery URL for private documents
  */
 export async function createCDNSignedUrl(fileId: string, expiresIn: number = 3600): Promise<string | null> {
+  if (!cdnConfigured()) {
+    console.warn('[CDN] KROOMBOX_API_KEY/JWT_TOKEN/PROJECT_ID belum diisi di .env — penandatanganan URL CDN dinonaktifkan.');
+    return null;
+  }
   try {
     const res = await fetch(`${CDN_BASE_URL}/api/bridge/sign/${fileId}`, {
       method: 'POST',
       headers: {
-        'x-api-key': CDN_API_KEY,
-        'Authorization': `Bearer ${CDN_JWT_TOKEN}`,
+        ...cdnAuthHeaders(),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ expiresIn })
@@ -128,6 +145,9 @@ export async function uploadToKroomboxCDN(
   fileName: string,
   mimeType: string = 'application/octet-stream'
 ): Promise<CdnUploadResult> {
+  if (!cdnConfigured()) {
+    throw new Error('Kredensial Kroombox CDN belum diisi di .env (KROOMBOX_API_KEY/JWT_TOKEN/PROJECT_ID). Unggah berkas dinonaktifkan.');
+  }
   const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType });
   const form = new FormData();
   form.append('file', blob, fileName);
@@ -137,10 +157,7 @@ export async function uploadToKroomboxCDN(
 
   const uploadRes = await fetch(`${CDN_BASE_URL}/api/bridge/upload`, {
     method: 'POST',
-    headers: {
-      'x-api-key': CDN_API_KEY,
-      'Authorization': `Bearer ${CDN_JWT_TOKEN}`
-    },
+    headers: cdnAuthHeaders(),
     body: form
   });
 
@@ -172,13 +189,14 @@ export async function uploadToKroomboxCDN(
  */
 export async function deleteFromKroomboxCDN(fileId: string): Promise<boolean> {
   if (!fileId) return true;
+  if (!cdnConfigured()) {
+    console.warn('[CDN] KROOMBOX_API_KEY/JWT_TOKEN/PROJECT_ID belum diisi di .env — penghapusan CDN dilewati.');
+    return false;
+  }
   try {
     const res = await fetch(`${CDN_BASE_URL}/api/bridge/files/${fileId}`, {
       method: 'DELETE',
-      headers: {
-        'x-api-key': CDN_API_KEY,
-        'Authorization': `Bearer ${CDN_JWT_TOKEN}`
-      }
+      headers: cdnAuthHeaders()
     });
     return res.ok;
   } catch (err) {
@@ -197,10 +215,14 @@ export async function deleteFromKroomboxCDN(fileId: string): Promise<boolean> {
  */
 export async function downloadFromKroomboxCDN(fileId: string, maxAttempts = 4): Promise<Buffer | null> {
   if (!fileId) return null;
+  if (!cdnConfigured()) {
+    console.warn('[CDN] KROOMBOX_API_KEY/JWT_TOKEN/PROJECT_ID belum diisi di .env — unduh CDN dinonaktifkan.');
+    return null;
+  }
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await fetch(cdnViewUrl(fileId), {
-        headers: { 'x-api-key': CDN_API_KEY, 'Authorization': `Bearer ${CDN_JWT_TOKEN}` },
+        headers: cdnAuthHeaders(),
         redirect: 'follow'
       });
       if (res.ok) {

@@ -19,6 +19,20 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size (fits LONGBLOB)
 });
 
+/**
+ * Boleh mengubah/menghapus dokumen ini?
+ * admin: semua dokumen. user biasa: hanya dokumen yang ia unggah, atau yang berada
+ * di proyeknya sendiri. Mencegah operasi lintas-tenant lewat id dokumen yang ditebak.
+ */
+function canManageDocument(doc: any, user?: { id?: string; role?: string; organizationId?: string | null }): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (doc.uploaded_by_id && doc.uploaded_by_id === user.id) return true;
+  const orgId = doc.organization_id || doc.org_id;
+  if (user.organizationId && orgId && orgId === user.organizationId) return true;
+  return false;
+}
+
 // 1. Get documents (with optional organizationId and repositoryType filter)
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -691,9 +705,10 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     }
 
     const [rows] = await p.query<any[]>(`
-      SELECT d.title, d.file_url, d.cdn_file_id, o.id as org_id, o.name as org_name 
-      FROM documents d 
-      JOIN organizations o ON d.organization_id = o.id 
+      SELECT d.title, d.file_url, d.cdn_file_id, d.uploaded_by_id, d.organization_id,
+             o.id as org_id, o.name as org_name
+      FROM documents d
+      JOIN organizations o ON d.organization_id = o.id
       WHERE d.id = ?
     `, [id]);
 
@@ -703,6 +718,13 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     }
 
     const doc = rows[0];
+
+    // OTORISASI: cegah penghapusan lintas-tenant. Sebelumnya hanya requireAuth,
+    // sehingga user mana pun yang login bisa menghapus dokumen tenant lain.
+    if (!canManageDocument(doc, req.authUser)) {
+      res.status(403).json({ success: false, message: 'Anda tidak berwenang menghapus dokumen ini.' });
+      return;
+    }
 
     // 2. If file was stored on Kroombox CDN, delete it from CDN storage
     if (doc.cdn_file_id) {
@@ -917,6 +939,12 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     }
 
     const doc = rows[0];
+
+    // OTORISASI: sama seperti handler di atas — cegah hapus lintas-tenant.
+    if (!canManageDocument(doc, req.authUser)) {
+      res.status(403).json({ success: false, message: 'Anda tidak berwenang menghapus dokumen ini.' });
+      return;
+    }
 
     // Hapus dari database MySQL
     await p.query('DELETE FROM documents WHERE id = ?', [id]);

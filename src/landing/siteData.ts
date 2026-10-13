@@ -101,7 +101,7 @@ export const siteData: SiteData = {
         number: '03',
         title: 'Keamanan Data & Privasi Terjamin',
         description:
-          'Perlindungan data menyeluruh dengan enkripsi AES-256 serta kontrol privasi penuh atas seluruh berkas Anda.',
+          'Data setiap project terisolasi — satu akun hanya dapat mengakses project miliknya, dengan kontrol akses berbasis peran (admin & pengguna).',
       },
     ],
   },
@@ -131,7 +131,7 @@ export const siteData: SiteData = {
         iconName: 'LockKeyhole',
         title: 'Keamanan Terjamin & Kendali Akses',
         description:
-          'Enkripsi menyeluruh AES-256 dengan pemisahan izin Admin dan Pengguna untuk memastikan kerahasiaan seluruh dokumen Anda.',
+          'Pemisahan izin Admin dan Pengguna, serta isolasi data antar project, untuk menjaga kerahasiaan dokumen Anda.',
       },
     ],
   },
@@ -284,7 +284,7 @@ export const siteData: SiteData = {
       id: 'faq-2',
       question: 'Bagaimana keamanan dan kerahasiaan dokumen saya?',
       answer:
-        'Keamanan adalah prioritas mutlak kami. Data setiap pengguna diisolasi secara ketat dalam workspace terenkripsi (AES-256 saat tersimpan dan TLS 1.3 saat transmisi). Kami berkomitmen bahwa seluruh dokumen dan percakapan Anda tidak akan pernah dibagikan atau digunakan untuk melatih model AI publik.',
+        'Keamanan adalah prioritas kami. Data setiap pengguna diisolasi per project — satu akun hanya dapat mengakses project miliknya — dan seluruh komunikasi dilindungi TLS saat transmisi. Kami berkomitmen bahwa dokumen Anda tidak akan dibagikan atau digunakan untuk melatih model AI publik.',
     },
     // SEMBUNYI SEMENTARA: FAQ seputar paket/langganan belum dipublikasikan
     // {
@@ -314,7 +314,7 @@ export const siteData: SiteData = {
       'Bergabunglah dengan ribuan pengguna yang telah mempercayakan dokumen dan arsip pengetahuannya pada KnowBase AI. Setup mudah, aman, dan siap pakai.',
     primaryButton: 'Mulai dengan Paket Pilihan',
     secondaryButton: 'Pelajari Lebih Lanjut',
-    footnote: 'Dukungan penuh berbahasa Indonesia · Keamanan data terenkripsi',
+    footnote: 'Dukungan penuh berbahasa Indonesia · Data terisolasi per project',
   },
 
   footer: {
@@ -336,7 +336,7 @@ export const siteData: SiteData = {
         links: [
           { label: 'Pertanyaan Umum (FAQ)', href: '#faq' },
           { label: 'Panduan Format Dokumen', href: '#faq' },
-          { label: 'Kebijakan Privasi Data', href: '#solusi' },
+          { label: 'Kebijakan Privasi Data', href: '/kebijakan-privasi' },
         ],
       },
       {

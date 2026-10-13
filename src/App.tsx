@@ -13,6 +13,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { LandingPage } from './pages/LandingPage';
+import { LegalPage } from './pages/LegalPage';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 // SEMBUNYI SEMENTARA: halaman manajemen paket & kuota belum dipublikasikan
@@ -75,6 +76,8 @@ export default function App() {
           {/* Public Landing Page */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/landing" element={<LandingPage />} />
+          <Route path="/ketentuan" element={<LegalPage kind="terms" />} />
+          <Route path="/kebijakan-privasi" element={<LegalPage kind="privacy" />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

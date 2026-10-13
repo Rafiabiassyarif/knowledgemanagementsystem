@@ -85,11 +85,11 @@ export default function Hero() {
               </div>
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <span>Enkripsi AES-256</span>
+                <span>Isolasi Data per Project</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>99.4% Akurasi Semantik</span>
+                <span>Multi-Format (PDF, DOCX)</span>
               </div>
             </div>
           </motion.div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Mail, Clock, ShieldCheck } from 'lucide-react';
 import { siteData } from './siteData';
 
@@ -37,7 +38,7 @@ export default function Footer() {
 
             <div className="pt-1 flex items-center gap-2 text-xs text-blue-100 dark:text-slate-300 bg-blue-700/70 dark:bg-slate-900 border border-blue-400/50 dark:border-slate-800 px-3 py-1.5 rounded-lg w-fit">
               <ShieldCheck className="w-4 h-4 text-white shrink-0" />
-              <span>Workspace Terenkripsi & Terisolasi</span>
+              <span>Data Terisolasi per Project</span>
             </div>
           </div>
 
@@ -100,11 +101,9 @@ export default function Footer() {
         <div className="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-blue-100 dark:text-slate-400 text-center sm:text-left">
           <p>© 2026 KnowBase AI. Seluruh hak cipta dilindungi undang-undang.</p>
           <div className="flex items-center gap-4 text-blue-200 dark:text-slate-400">
-            <a href="#rag" className="hover:text-white transition-colors">Tentang RAG</a>
+            <Link to="/ketentuan" className="hover:text-white transition-colors">Ketentuan Layanan</Link>
             <span>•</span>
-            <a href="#faq" className="hover:text-white transition-colors">Ketentuan Layanan</a>
-            <span>•</span>
-            <a href="#faq" className="hover:text-white transition-colors">Kebijakan Privasi</a>
+            <Link to="/kebijakan-privasi" className="hover:text-white transition-colors">Kebijakan Privasi</Link>
           </div>
         </div>
       </div>

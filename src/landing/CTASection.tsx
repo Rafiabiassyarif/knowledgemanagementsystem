@@ -47,7 +47,7 @@ export default function CTASection() {
           </div>
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>Enkripsi terisolasi per workspace</span>
+            <span>Data terisolasi per project</span>
           </div>
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />

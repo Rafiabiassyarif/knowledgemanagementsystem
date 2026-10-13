@@ -163,7 +163,7 @@ export default function RAGIntro() {
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      Bebas Halusinasi (100% Fakta)
+                      Jawaban Bersumber dari Dokumen
                     </h4>
                     <span className="font-mono text-xs font-bold text-slate-300 dark:text-slate-600 group-hover:text-blue-500/60 transition-colors shrink-0">
                       01
@@ -189,14 +189,14 @@ export default function RAGIntro() {
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                      Hemat 90% Waktu Riset
+                      Temukan Jawaban Lebih Cepat
                     </h4>
                     <span className="font-mono text-xs font-bold text-slate-300 dark:text-slate-600 group-hover:text-amber-500/60 transition-colors shrink-0">
                       02
                     </span>
                   </div>
                   <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-normal">
-                    Tidak perlu lagi membaca manual berkas ratusan lembar. Dapatkan inti jawaban dalam waktu 3 detik.
+                    Tidak perlu lagi membaca manual berkas ratusan lembar. Ajukan pertanyaan dan dapatkan inti jawabannya beserta rujukan halamannya.
                   </p>
                 </div>
               </motion.div>
@@ -222,7 +222,7 @@ export default function RAGIntro() {
                     </span>
                   </div>
                   <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-normal">
-                    Seluruh dokumen tersimpan dalam ruang kerja terenkripsi dan tidak digunakan untuk melatih model AI publik.
+                    Setiap project terisolasi — pengguna hanya dapat mengakses data project miliknya. Dokumen Anda tidak digunakan untuk melatih model AI publik.
                   </p>
                 </div>
               </motion.div>

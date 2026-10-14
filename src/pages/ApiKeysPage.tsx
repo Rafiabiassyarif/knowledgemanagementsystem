@@ -14,13 +14,14 @@ import {
 
 interface ApiKeyRow {
   id: string;
-  user_id: string;
+  userId: string;
   label: string;
-  key_prefix: string;
-  last_used_at: string | null;
-  revoked_at: string | null;
-  created_at: string;
-  user?: { id: string; name: string; email: string };
+  prefix: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  userName?: string | null;
+  userEmail?: string | null;
 }
 
 function authHeaders() {
@@ -113,8 +114,8 @@ export const ApiKeysPage: React.FC = () => {
     }
   };
 
-  const activeKeys = keys.filter(k => !k.revoked_at);
-  const revokedKeys = keys.filter(k => k.revoked_at);
+  const activeKeys = keys.filter(k => !k.revokedAt);
+  const revokedKeys = keys.filter(k => k.revokedAt);
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -236,13 +237,13 @@ export const ApiKeysPage: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">{k.label}</span>
                     <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                      {k.key_prefix}...
+                      {k.prefix}...
                     </code>
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Dibuat: {fmtDate(k.created_at)}</span>
-                    <span>Terakhir dipakai: {fmtDate(k.last_used_at)}</span>
-                    {k.user && <span>Pemilik: {k.user.name}</span>}
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Dibuat: {fmtDate(k.createdAt)}</span>
+                    <span>Terakhir dipakai: {fmtDate(k.lastUsedAt)}</span>
+                    {k.userName && <span>Pemilik: {k.userName}</span>}
                   </div>
                 </div>
                 <button
@@ -272,8 +273,8 @@ export const ApiKeysPage: React.FC = () => {
           <div className="space-y-1.5">
             {revokedKeys.map((k) => (
               <div key={k.id} className="flex items-center justify-between gap-3 p-2 text-xs text-slate-400 dark:text-slate-500">
-                <span className="truncate">{k.label} — <code className="font-mono">{k.key_prefix}...</code></span>
-                <span className="shrink-0">Dicabut: {fmtDate(k.revoked_at)}</span>
+                <span className="truncate">{k.label} — <code className="font-mono">{k.prefix}...</code></span>
+                <span className="shrink-0">Dicabut: {fmtDate(k.revokedAt)}</span>
               </div>
             ))}
           </div>

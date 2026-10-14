@@ -293,9 +293,11 @@ const MIN_KB_IMPORT_INTERVAL_MS = 45 * 1000;
  *
  * PENGAMAN WAJIB (rag.aiones.app adalah server BERSAMA lintas aplikasi, bukan
  * eksklusif milik KMS ini):
- *   1. HANYA Knowledge Base berawalan "kb_" yang dipertimbangkan (konvensi
- *      penamaan KMS). KB app lain (kb-vibecontent-*, dm-*, gammi-study-*, dst)
- *      TIDAK PERNAH diimpor karena tidak memenuhi pola ini.
+ *   1. SEMUA Knowledge Base yang terdaftar di RAG (apa pun pola namanya --
+ *      prefix "kb_" dan lainnya) diimpor jadi project baru di KMS. Ini
+ *      keputusan eksplisit user: lebih penting semua KB di RAG kebaca,
+ *      walau artinya KB app lain (kb-vibecontent-*, dm-*, dst) ikut
+ *      tersalin sebagai project di KMS BUMD.
  *   2. KB yang sudah terdaftar sebagai knowledge_base project manapun di KMS
  *      dilewati (tidak dibuat duplikat).
  *   3. Project baru dibuat dengan status 'active' dan ditandai sumbernya
@@ -320,8 +322,8 @@ export async function autoImportNewRagKnowledgeBases(force: boolean = false): Pr
       return { success: false, importedCount: 0, imported: [], error: ragResult.error };
     }
 
-    // Hanya kandidat prefix "kb_" (konvensi KMS); KB app lain diabaikan total.
-    const candidates = (ragResult.data || []).filter(k => k.knowledgeBaseId.startsWith('kb_'));
+    // Semua KB di RAG dianggap kandidat (tidak difilter prefix) -- keputusan user.
+    const candidates = ragResult.data || [];
     if (candidates.length === 0) {
       return { success: true, importedCount: 0, imported: [] };
     }
@@ -334,10 +336,11 @@ export async function autoImportNewRagKnowledgeBases(force: boolean = false): Pr
     for (const kb of candidates) {
       if (existingKbSet.has(kb.knowledgeBaseId)) continue;
 
-      // Buang prefix "kb_" & buat kode project yang rapi dari sisa nama KB.
+      // Buang prefix "kb_" bila ada; sisanya (nama KB apa pun bentuknya, mis.
+      // "dm-640d79d2-...", "testing-bumd") dirapikan jadi kode project valid.
       const slug = kb.knowledgeBaseId.replace(/^kb_/, '').slice(0, 30);
       const code = `RAG-${slug}`.toUpperCase().replace(/[^A-Z0-9_-]/g, '-').slice(0, 40);
-      const name = `[RAG] ${slug.replace(/_/g, ' ')}`;
+      const name = `[RAG] ${slug.replace(/[_-]/g, ' ')}`;
       const orgId = `org-ragimport-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
       try {

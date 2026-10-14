@@ -176,11 +176,11 @@ router.post('/organizations/:id/status', async (req: Request, res: Response): Pr
 });
 
 // 5. Laporan (READ-ONLY) perbandingan Knowledge Base KMS <-> rag.aiones.app.
-// CATATAN KEAMANAN: rag.aiones.app adalah server BERSAMA dipakai banyak aplikasi
-// lain -- TIDAK pernah auto-membuat project baru dari sini. Hasil difilter
-// hanya KB berawalan "kb_" (konvensi penamaan KMS) agar KB milik aplikasi lain
-// (mis. kb-vibecontent-*, dm-*, gammi-study-*) tidak pernah ditampilkan sebagai
-// "milik KMS", apalagi diimpor jadi project.
+// CATATAN: rag.aiones.app adalah server BERSAMA dipakai banyak aplikasi lain.
+// Endpoint ini hanya MELAPORKAN, tidak pernah membuat project baru -- yang
+// membuat project adalah worker auto-import di services/ragSync.ts (berjalan
+// terpisah, tiap 45 detik). Sejak keputusan user, SEMUA KB (apa pun prefix
+// namanya) ditampilkan & diimpor -- tidak lagi dibatasi hanya "kb_".
 router.get('/rag-kb-report', async (_req: Request, res: Response): Promise<void> => {
   try {
     const p = getPool();
@@ -196,24 +196,24 @@ router.get('/rag-kb-report', async (_req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Hanya KB dengan prefix "kb_" yang dianggap kandidat milik KMS BUMD.
-    const kmsPrefixedKbs = (ragResult.data || []).filter(k => k.knowledgeBaseId.startsWith('kb_'));
+    // Semua KB di RAG (tidak difilter prefix) -- sesuai keputusan user.
+    const allRagKbs = ragResult.data || [];
 
-    const matched = kmsPrefixedKbs
+    const matched = allRagKbs
       .filter(k => kbToOrg.has(k.knowledgeBaseId))
       .map(k => ({ ...k, projectName: kbToOrg.get(k.knowledgeBaseId)?.name, projectCode: kbToOrg.get(k.knowledgeBaseId)?.code }));
 
-    const orphanInRag = kmsPrefixedKbs.filter(k => !kbToOrg.has(k.knowledgeBaseId));
+    const orphanInRag = allRagKbs.filter(k => !kbToOrg.has(k.knowledgeBaseId));
 
     const notYetInRag = orgs
-      .filter(o => !kmsPrefixedKbs.some(k => k.knowledgeBaseId === o.knowledge_base))
+      .filter(o => !allRagKbs.some(k => k.knowledgeBaseId === o.knowledge_base))
       .map(o => ({ projectName: o.name, projectCode: o.code, knowledgeBaseId: o.knowledge_base }));
 
     res.json({
       success: true,
       summary: {
         totalProjectsKms: orgs.length,
-        totalKbPrefixedDiRag: kmsPrefixedKbs.length,
+        totalKbDiRag: allRagKbs.length,
         tersinkron: matched.length,
         belumAdaDiRag: notYetInRag.length,
         kbYatimDiRag: orphanInRag.length
@@ -221,7 +221,7 @@ router.get('/rag-kb-report', async (_req: Request, res: Response): Promise<void>
       tersinkron: matched,
       belumAdaDiRag: notYetInRag,
       kbYatimDiRag: orphanInRag,
-      catatan: 'Daftar "kbYatimDiRag" HANYA kandidat (prefix kb_ yang tidak cocok project manapun di KMS). Ini TIDAK auto-dibuat jadi project -- tinjau manual sebelum mengambil tindakan apa pun.'
+      catatan: '"kbYatimDiRag" akan otomatis diimpor jadi project oleh worker auto-import (interval 45 detik). Catatan: KB yang BELUM punya dokumen sama sekali di RAG tidak akan muncul di daftar ini sampai ada dokumen pertama diindeks ke dalamnya (keterbatasan API RAG).'
     });
   } catch (err: any) {
     console.error('[ADMIN RAG KB REPORT ERROR]', err);

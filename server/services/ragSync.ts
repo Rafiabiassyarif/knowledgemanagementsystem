@@ -1,5 +1,6 @@
 import { getPool } from '../db';
 import { deleteFromKroomboxCDN } from './cdn';
+import { listAllRagKnowledgeBases } from './rag';
 import fs from 'fs';
 import path from 'path';
 
@@ -274,4 +275,100 @@ export async function handleRagDocumentDeletedWebhook(payload: any): Promise<{ s
   }
 
   return { success: true, message: `${rows.length} dokumen berhasil dihapus dari database & CDN.`, doc: rows[0] };
+}
+
+export interface AutoImportResult {
+  success: boolean;
+  importedCount: number;
+  imported: Array<{ id: string; name: string; code: string; knowledgeBaseId: string }>;
+  error?: string;
+}
+
+// Throttle terpisah khusus auto-import KB (tidak berbagi batas waktu dengan reconcileRagDeletions)
+let lastKbImportTimestamp = 0;
+const MIN_KB_IMPORT_INTERVAL_MS = 45 * 1000;
+
+/**
+ * Sinkronisasi OTOMATIS satu arah: KB baru di rag.aiones.app -> project baru di KMS.
+ *
+ * PENGAMAN WAJIB (rag.aiones.app adalah server BERSAMA lintas aplikasi, bukan
+ * eksklusif milik KMS ini):
+ *   1. HANYA Knowledge Base berawalan "kb_" yang dipertimbangkan (konvensi
+ *      penamaan KMS). KB app lain (kb-vibecontent-*, dm-*, gammi-study-*, dst)
+ *      TIDAK PERNAH diimpor karena tidak memenuhi pola ini.
+ *   2. KB yang sudah terdaftar sebagai knowledge_base project manapun di KMS
+ *      dilewati (tidak dibuat duplikat).
+ *   3. Project baru dibuat dengan status 'active' dan ditandai sumbernya
+ *      ("Diimpor otomatis dari rag.aiones.app") lewat kolom description agar
+ *      admin tahu asal-usulnya saat meninjau.
+ *   4. Best-effort & non-blocking -- kegagalan RAG tidak pernah mengganggu
+ *      server utama (dipanggil dari worker interval, bukan dari request user).
+ */
+export async function autoImportNewRagKnowledgeBases(force: boolean = false): Promise<AutoImportResult> {
+  const now = Date.now();
+  if (!force && (now - lastKbImportTimestamp) < MIN_KB_IMPORT_INTERVAL_MS) {
+    return { success: true, importedCount: 0, imported: [] };
+  }
+  lastKbImportTimestamp = now;
+
+  const imported: Array<{ id: string; name: string; code: string; knowledgeBaseId: string }> = [];
+
+  try {
+    const p = getPool();
+    const ragResult = await listAllRagKnowledgeBases();
+    if (!ragResult.success) {
+      return { success: false, importedCount: 0, imported: [], error: ragResult.error };
+    }
+
+    // Hanya kandidat prefix "kb_" (konvensi KMS); KB app lain diabaikan total.
+    const candidates = (ragResult.data || []).filter(k => k.knowledgeBaseId.startsWith('kb_'));
+    if (candidates.length === 0) {
+      return { success: true, importedCount: 0, imported: [] };
+    }
+
+    const [existingOrgs] = await p.query<any[]>(
+      'SELECT knowledge_base FROM organizations WHERE knowledge_base IS NOT NULL AND knowledge_base != ""'
+    );
+    const existingKbSet = new Set(existingOrgs.map(o => o.knowledge_base));
+
+    for (const kb of candidates) {
+      if (existingKbSet.has(kb.knowledgeBaseId)) continue;
+
+      // Buang prefix "kb_" & buat kode project yang rapi dari sisa nama KB.
+      const slug = kb.knowledgeBaseId.replace(/^kb_/, '').slice(0, 30);
+      const code = `RAG-${slug}`.toUpperCase().replace(/[^A-Z0-9_-]/g, '-').slice(0, 40);
+      const name = `[RAG] ${slug.replace(/_/g, ' ')}`;
+      const orgId = `org-ragimport-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      try {
+        // Hindari tabrakan kode jika proses berjalan dua kali bersamaan.
+        const [dup] = await p.query<any[]>('SELECT id FROM organizations WHERE LOWER(code) = LOWER(?)', [code]);
+        if (dup.length > 0) continue;
+
+        await p.query(
+          `INSERT INTO organizations (id, name, code, knowledge_base, type, description, admin_name, status)
+           VALUES (?, ?, ?, ?, 'Lainnya', ?, 'Sistem (Auto-Import RAG)', 'active')`,
+          [
+            orgId, name, code, kb.knowledgeBaseId,
+            `Project dibuat otomatis oleh sistem karena Knowledge Base "${kb.knowledgeBaseId}" terdeteksi sudah ada di rag.aiones.app (${kb.documents} dokumen, ${kb.chunks} chunk) namun belum terdaftar di KMS. Tinjau & lengkapi detail project ini.`
+          ]
+        );
+
+        await p.query(`
+          INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+          VALUES (?, ?, ?, 'Sistem Sinkronisasi RAG', 'system', 'Auto-Import Project dari RAG', ?, 'organization')
+        `, [`act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, orgId, name, name]);
+
+        console.log(`[RAG AUTO-IMPORT OK] Project baru "${name}" (${code}) dibuat dari KB RAG "${kb.knowledgeBaseId}".`);
+        imported.push({ id: orgId, name, code, knowledgeBaseId: kb.knowledgeBaseId });
+      } catch (rowErr: any) {
+        console.warn(`[RAG AUTO-IMPORT WARN] Gagal impor KB "${kb.knowledgeBaseId}":`, rowErr?.message || rowErr);
+      }
+    }
+
+    return { success: true, importedCount: imported.length, imported };
+  } catch (err: any) {
+    console.warn('[RAG AUTO-IMPORT TOP-LEVEL ERROR]', err?.message || err);
+    return { success: false, importedCount: imported.length, imported, error: err?.message || String(err) };
+  }
 }

@@ -95,7 +95,7 @@ app.use('/api/cdn', requireAuth, cdnRoutes);
 // Chat RAG AI (query knowledge + render lampiran multi-dokumen CDN)
 app.use('/api/chat', requireAuth, chatRoutes);
 
-import { reconcileRagDeletions, handleRagDocumentDeletedWebhook } from './services/ragSync';
+import { reconcileRagDeletions, handleRagDocumentDeletedWebhook, autoImportNewRagKnowledgeBases } from './services/ragSync';
 
 // Webhook publik untuk notifikasi saat dokumen dihapus di server RAG (https://rag.aiones.app/)
 app.post('/api/webhooks/rag', async (req: Request, res: Response) => {
@@ -141,6 +141,21 @@ async function startServer() {
         await reconcileRagDeletions(undefined, true, false);
       } catch (syncErr) {
         console.warn('[RAG AUTO-SYNC BACKGROUND WARN]', syncErr);
+      }
+    }, RAG_SYNC_INTERVAL_MS);
+
+    // Background auto-import (interval 45 detik, offset): Knowledge Base baru
+    // di rag.aiones.app (prefix "kb_") yang belum punya project di KMS akan
+    // otomatis dibuatkan project barunya. KB aplikasi lain (prefix berbeda)
+    // tidak pernah tersentuh -- lihat pengaman di services/ragSync.ts.
+    setInterval(async () => {
+      try {
+        const result = await autoImportNewRagKnowledgeBases();
+        if (result.importedCount > 0) {
+          console.log(`[RAG AUTO-IMPORT] ${result.importedCount} project baru diimpor dari rag.aiones.app.`);
+        }
+      } catch (importErr) {
+        console.warn('[RAG AUTO-IMPORT BACKGROUND WARN]', importErr);
       }
     }, RAG_SYNC_INTERVAL_MS);
 

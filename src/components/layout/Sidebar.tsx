@@ -19,7 +19,8 @@ import {
   Zap,
   HardDrive,
   Sliders,
-  FolderKanban
+  FolderKanban,
+  KeyRound
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -55,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
         { to: '/admin/users', label: 'Pengguna & Hak Akses', icon: Users },
         { to: '/admin/cdn', label: 'Monitoring CDN & RAG', icon: HardDrive },
         { to: '/admin/activity', label: 'Log Aktivitas', icon: Activity },
+        { to: '/admin/api-keys', label: 'Kunci API', icon: KeyRound },
       ];
     }
 

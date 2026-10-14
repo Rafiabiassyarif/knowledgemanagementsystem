@@ -16,6 +16,7 @@ import { LandingPage } from './pages/LandingPage';
 import { LegalPage } from './pages/LegalPage';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { ApiKeysPage } from './pages/ApiKeysPage';
 // SEMBUNYI SEMENTARA: halaman manajemen paket & kuota belum dipublikasikan
 // import { QuotaManagementPage } from './pages/QuotaManagementPage';
 import { CdnMonitoringPage } from './pages/CdnMonitoringPage';
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="documents" element={<DocumentsPage />} />
             <Route path="cdn" element={<CdnMonitoringPage />} />
             <Route path="activity" element={<ActivityPage />} />
+            <Route path="api-keys" element={<ApiKeysPage />} />
             <Route path="settings" element={<Navigate to="/admin" replace />} />
           </Route>
 

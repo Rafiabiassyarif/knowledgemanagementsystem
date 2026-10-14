@@ -380,3 +380,50 @@ export async function queryRag(params: QueryRagParams): Promise<RagQueryResult> 
     };
   }
 }
+
+export interface RagKnowledgeBaseSummary {
+  knowledgeBaseId: string;
+  documents: number;
+  chunks: number;
+  tokens: number;
+}
+
+/**
+ * Ambil daftar SELURUH Knowledge Base yang ada di rag.aiones.app memakai
+ * master key operator. PERHATIAN: rag.aiones.app adalah server BERSAMA yang
+ * dipakai banyak aplikasi lain (bukan cuma KMS ini) -- daftar mentah dari
+ * endpoint ini BISA memuat KB milik aplikasi lain. Pemanggil WAJIB menyaring
+ * hasilnya (mis. hanya prefix "kb_" dan/atau hanya yang cocok dengan kode
+ * project KMS) sebelum ditampilkan sebagai "milik KMS".
+ */
+export async function listAllRagKnowledgeBases(): Promise<{ success: boolean; data?: RagKnowledgeBaseSummary[]; error?: string }> {
+  if (!RAG_API_KEY) {
+    return { success: false, error: 'RAG_API_KEY tidak disetel di .env' };
+  }
+  try {
+    const res = await fetch(`${RAG_BASE_URL}/api/v1/knowledge-bases`, {
+      headers: { 'Authorization': `Bearer ${RAG_API_KEY}` },
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!res.ok) {
+      return { success: false, error: `RAG HTTP ${res.status}` };
+    }
+    const data: any = await res.json().catch(() => null);
+    const list = data?.data?.knowledge_bases;
+    if (!Array.isArray(list)) {
+      return { success: false, error: 'Format respons RAG tidak dikenali' };
+    }
+    return {
+      success: true,
+      data: list.map((k: any) => ({
+        knowledgeBaseId: k.knowledge_base_id,
+        documents: Number(k.documents) || 0,
+        chunks: Number(k.chunks) || 0,
+        tokens: Number(k.tokens) || 0
+      }))
+    };
+  } catch (err: any) {
+    console.warn('[RAG LIST KB WARN]', err?.message || err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}

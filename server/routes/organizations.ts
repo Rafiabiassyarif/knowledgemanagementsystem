@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey, revokeProjectRagKey } from '../services/ragKeys';
-import { deleteDocumentFromRag } from '../services/rag';
+import { deleteDocumentFromRag, indexDocumentToRag } from '../services/rag';
 import { deleteFromKroomboxCDN } from '../services/cdn';
 
 const router = Router();
@@ -252,6 +252,61 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     ensureProjectRagKey(orgId, name.trim())
       .then(r => console.log(`[PROJECT RAG] Key project "${name.trim()}" (${orgId}) siap (sumber: ${r.source}).`))
       .catch(e => console.warn('[PROJECT RAG WARN] Provision key gagal:', e?.message || e));
+
+    // Sinkronkan Knowledge Base ke rag.aiones.app SAAT ITU JUGA (bukan menunggu
+    // user upload dokumen pertama secara manual). Catatan penting: RAG TIDAK
+    // punya endpoint "buat KB kosong" -- satu-satunya cara KB benar-benar
+    // tercatat di RAG adalah dengan mengindeks sebuah dokumen ke dalamnya
+    // (dikonfirmasi dari dokumentasi resmi rag.aiones.app/docs:
+    // "Knowledge base tidak dibuat terpisah - ia muncul begitu dokumen
+    // pertamanya diindeks"). Jadi kita kirim SATU dokumen info otomatis
+    // berisi profil project, best-effort & non-blocking agar pembuatan
+    // project tidak pernah terblokir bila RAG sedang down.
+    const infoDocId = `doc-seed-info-${orgId}`;
+    const infoText = [
+      `# Info Project: ${name.trim()}`,
+      `- Kode: ${code.trim().toUpperCase()}`,
+      `- Tipe: ${type}`,
+      sector ? `- Sektor: ${sector}` : null,
+      province || city ? `- Lokasi: ${[city, province].filter(Boolean).join(', ')}` : null,
+      description ? `- Deskripsi: ${description}` : null,
+      '',
+      'Dokumen ini dibuat otomatis oleh sistem saat project dibuat, agar Knowledge Base',
+      `"${finalKb}" langsung tercatat dan siap diisi dokumen lain di rag.aiones.app.`
+    ].filter(Boolean).join('\n');
+
+    (async () => {
+      try {
+        const projectKey = await ensureProjectRagKey(orgId, name.trim());
+        const result = await indexDocumentToRag({
+          documentId: infoDocId,
+          organizationId: orgId,
+          knowledgeBaseId: finalKb,
+          documentName: `Info Project - ${name.trim()}.txt`,
+          text: infoText,
+          apiKey: projectKey.key,
+          metadata: { title: `Info Project - ${name.trim()}`, category: 'Sistem', auto_generated: true }
+        });
+        if (result.success) {
+          const p2 = getPool();
+          await p2.query(
+            `INSERT INTO documents (id, organization_id, title, category, repository_type, file_type, file_size_kb, file_url, file_name, year, summary, tags, uploaded_by, uploader_role)
+             VALUES (?, ?, ?, 'Sistem', 'document', 'TXT', 1, NULL, ?, ?, ?, ?, 'Sistem', 'admin')
+             ON DUPLICATE KEY UPDATE title = VALUES(title)`,
+            [
+              infoDocId, orgId, `Info Project - ${name.trim()}`, `Info Project - ${name.trim()}.txt`,
+              new Date().getFullYear(), `Dokumen info otomatis untuk project ${name.trim()}, dibuat agar Knowledge Base langsung aktif di RAG.`,
+              JSON.stringify(['sistem', 'auto-generated'])
+            ]
+          );
+          console.log(`[RAG KB SYNC OK] Knowledge Base "${finalKb}" tersinkron ke rag.aiones.app saat project "${name.trim()}" dibuat.`);
+        } else {
+          console.warn(`[RAG KB SYNC WARN] Gagal sinkron KB "${finalKb}" ke RAG saat buat project:`, result.error);
+        }
+      } catch (e: any) {
+        console.warn('[RAG KB SYNC WARN] Exception saat sinkron KB ke RAG:', e?.message || e);
+      }
+    })();
 
     // Log activity
     await p.query(`

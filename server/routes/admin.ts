@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import fetch from 'node-fetch';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { listAllRagKnowledgeBases } from '../services/rag';
 
 const router = Router();
 
@@ -171,6 +172,60 @@ router.post('/organizations/:id/status', async (req: Request, res: Response): Pr
   } catch (err: any) {
     console.error('[ADMIN ORG STATUS ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal mengubah status organisasi.' });
+  }
+});
+
+// 5. Laporan (READ-ONLY) perbandingan Knowledge Base KMS <-> rag.aiones.app.
+// CATATAN KEAMANAN: rag.aiones.app adalah server BERSAMA dipakai banyak aplikasi
+// lain -- TIDAK pernah auto-membuat project baru dari sini. Hasil difilter
+// hanya KB berawalan "kb_" (konvensi penamaan KMS) agar KB milik aplikasi lain
+// (mis. kb-vibecontent-*, dm-*, gammi-study-*) tidak pernah ditampilkan sebagai
+// "milik KMS", apalagi diimpor jadi project.
+router.get('/rag-kb-report', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const p = getPool();
+    const [orgs] = await p.query<any[]>('SELECT id, name, code, knowledge_base FROM organizations WHERE knowledge_base IS NOT NULL AND knowledge_base != ""');
+    const kbToOrg = new Map<string, any>();
+    for (const o of orgs) {
+      if (o.knowledge_base) kbToOrg.set(o.knowledge_base, o);
+    }
+
+    const ragResult = await listAllRagKnowledgeBases();
+    if (!ragResult.success) {
+      res.status(502).json({ success: false, message: `Gagal mengambil daftar KB dari RAG: ${ragResult.error}` });
+      return;
+    }
+
+    // Hanya KB dengan prefix "kb_" yang dianggap kandidat milik KMS BUMD.
+    const kmsPrefixedKbs = (ragResult.data || []).filter(k => k.knowledgeBaseId.startsWith('kb_'));
+
+    const matched = kmsPrefixedKbs
+      .filter(k => kbToOrg.has(k.knowledgeBaseId))
+      .map(k => ({ ...k, projectName: kbToOrg.get(k.knowledgeBaseId)?.name, projectCode: kbToOrg.get(k.knowledgeBaseId)?.code }));
+
+    const orphanInRag = kmsPrefixedKbs.filter(k => !kbToOrg.has(k.knowledgeBaseId));
+
+    const notYetInRag = orgs
+      .filter(o => !kmsPrefixedKbs.some(k => k.knowledgeBaseId === o.knowledge_base))
+      .map(o => ({ projectName: o.name, projectCode: o.code, knowledgeBaseId: o.knowledge_base }));
+
+    res.json({
+      success: true,
+      summary: {
+        totalProjectsKms: orgs.length,
+        totalKbPrefixedDiRag: kmsPrefixedKbs.length,
+        tersinkron: matched.length,
+        belumAdaDiRag: notYetInRag.length,
+        kbYatimDiRag: orphanInRag.length
+      },
+      tersinkron: matched,
+      belumAdaDiRag: notYetInRag,
+      kbYatimDiRag: orphanInRag,
+      catatan: 'Daftar "kbYatimDiRag" HANYA kandidat (prefix kb_ yang tidak cocok project manapun di KMS). Ini TIDAK auto-dibuat jadi project -- tinjau manual sebelum mengambil tindakan apa pun.'
+    });
+  } catch (err: any) {
+    console.error('[ADMIN RAG KB REPORT ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal membuat laporan perbandingan Knowledge Base.' });
   }
 });
 

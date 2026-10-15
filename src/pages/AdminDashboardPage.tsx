@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { chartTooltipProps } from '../utils/chartTheme';
 import { StatCard } from '../components/common/StatCard';
 import { CreateProjectModal } from '../components/common/CreateProjectModal';
 import { API_BASE_URL, tokenStore } from '../services/api';
@@ -376,9 +377,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.25} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} stroke="#cbd5e1" />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '11px' }}
-                />
+                <Tooltip {...chartTooltipProps} labelFormatter={(_l: any, items: any) => items?.[0]?.payload?.fullName ?? _l} />
                 <Bar dataKey="count" name="Jumlah BUMD" radius={[6, 6, 0, 0]}>
                   {sectorData.map((_, index) => (
                     <Cell key={`sector-${index}`} fill={SECTOR_PALETTE[index % SECTOR_PALETTE.length]} />
@@ -411,9 +410,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.25} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} stroke="#cbd5e1" />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '11px' }}
-                />
+                <Tooltip {...chartTooltipProps} labelFormatter={(_l: any, items: any) => items?.[0]?.payload?.fullName ?? _l} />
                 <Bar dataKey="documents" name="Dokumen" fill="#2563eb" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

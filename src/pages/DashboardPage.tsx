@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { chartTooltipProps } from '../utils/chartTheme';
 import { StatCard } from '../components/common/StatCard';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
 import { CreateProjectModal } from '../components/common/CreateProjectModal';
@@ -222,9 +223,7 @@ export const DashboardPage: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.25} />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}
-                />
+                <Tooltip {...chartTooltipProps} />
                 <Area type="monotone" dataKey="documents" name="Dokumen" stroke="#2563eb" strokeWidth={2.5} fillOpacity={1} fill="url(#docGrad)" />
                 <Area type="monotone" dataKey="media" name="Foto & Media" stroke="#9333ea" strokeWidth={2} fillOpacity={1} fill="url(#mediaGrad)" />
               </AreaChart>
@@ -254,9 +253,7 @@ export const DashboardPage: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.25} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} stroke="#cbd5e1" />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} stroke="#cbd5e1" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}
-                />
+                <Tooltip {...chartTooltipProps} />
                 <Bar dataKey="docs" name="Jumlah Berkas" radius={[6, 6, 0, 0]}>
                   {projectKnowledgeDistribution.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={PROJECT_PALETTE[index % PROJECT_PALETTE.length]} />

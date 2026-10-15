@@ -6,7 +6,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import { indexDocumentToRag, deleteDocumentFromRag } from '../services/rag';
 import { uploadToKroomboxCDN, deleteFromKroomboxCDN, cdnViewUrl, downloadFromKroomboxCDN } from '../services/cdn';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireWebhookSecret } from '../middleware/auth';
 import { ensureProjectRagKey } from '../services/ragKeys';
 import { reconcileRagDeletions, handleRagDocumentDeletedWebhook } from '../services/ragSync';
 
@@ -1327,8 +1327,9 @@ router.post('/reconcile-rag', requireAuth, async (req: Request, res: Response): 
   }
 });
 
-// 13. Webhook: Endpoint publik untuk menerima notifikasi saat berkas dihapus langsung di RAG server
-router.post('/rag-webhook', async (req: Request, res: Response): Promise<void> => {
+// 13. Webhook server-ke-server: notifikasi saat berkas dihapus langsung di RAG server.
+// WAJIB X-Webhook-Secret (fail-closed) — endpoint ini memicu penghapusan berkas.
+router.post('/rag-webhook', requireWebhookSecret, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await handleRagDocumentDeletedWebhook(req.body);
     res.json(result);

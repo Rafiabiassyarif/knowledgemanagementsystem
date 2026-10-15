@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { initDatabase } from './db';
-import { requireAuth } from './middleware/auth';
+import { requireAuth, requireWebhookSecret } from './middleware/auth';
 
 import authRoutes from './routes/auth';
 import organizationRoutes from './routes/organizations';
@@ -97,8 +97,10 @@ app.use('/api/chat', requireAuth, chatRoutes);
 
 import { reconcileRagDeletions, handleRagDocumentDeletedWebhook, autoImportNewRagKnowledgeBases } from './services/ragSync';
 
-// Webhook publik untuk notifikasi saat dokumen dihapus di server RAG (https://rag.aiones.app/)
-app.post('/api/webhooks/rag', async (req: Request, res: Response) => {
+// Webhook server-ke-server: notifikasi saat dokumen dihapus di server RAG
+// (https://rag.aiones.app/). WAJIB memakai X-Webhook-Secret (fail-closed bila
+// RAG_WEBHOOK_SECRET belum disetel) — endpoint ini memicu penghapusan berkas.
+app.post('/api/webhooks/rag', requireWebhookSecret, async (req: Request, res: Response) => {
   try {
     const result = await handleRagDocumentDeletedWebhook(req.body);
     res.json(result);
@@ -106,7 +108,7 @@ app.post('/api/webhooks/rag', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Gagal memproses webhook RAG.', error: err.message });
   }
 });
-app.post('/api/rag/webhook', async (req: Request, res: Response) => {
+app.post('/api/rag/webhook', requireWebhookSecret, async (req: Request, res: Response) => {
   try {
     const result = await handleRagDocumentDeletedWebhook(req.body);
     res.json(result);

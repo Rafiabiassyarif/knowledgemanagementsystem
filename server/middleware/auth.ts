@@ -183,3 +183,37 @@ export function requireRole(...roles: AuthUserPayload['role'][]) {
     next();
   };
 }
+
+/**
+ * Guard untuk webhook server-ke-server (mis. notifikasi penghapusan dokumen dari
+ * rag.aiones.app). Endpoint webhook ini MEMICU PENGHAPUSAN berkas dari CDN &
+ * database, jadi TIDAK BOLEH bisa dipanggil siapa pun.
+ *
+ * Fail-closed: bila RAG_WEBHOOK_SECRET belum diisi di .env, seluruh permintaan
+ * DITOLAK (503) alih-alih dibiarkan terbuka. Pemanggil harus menyertakan header
+ * `X-Webhook-Secret: <nilai>` (atau `Authorization: Bearer <nilai>`).
+ * Perbandingan memakai timingSafeEqual agar tidak bocor lewat waktu respons.
+ */
+export function requireWebhookSecret(req: Request, res: Response, next: NextFunction): void {
+  const secret = (process.env.RAG_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    console.error('[WEBHOOK] RAG_WEBHOOK_SECRET belum disetel di .env — permintaan webhook DITOLAK (fail-closed).');
+    res.status(503).json({ success: false, message: 'Webhook belum dikonfigurasi di server ini.' });
+    return;
+  }
+
+  const headerSecret = (req.headers['x-webhook-secret'] as string | undefined) || '';
+  const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const provided = (headerSecret || bearer || '').trim();
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+
+  if (!ok) {
+    console.warn(`[WEBHOOK] Permintaan tanpa secret valid ditolak (ip=${req.ip}, path=${req.originalUrl}).`);
+    res.status(401).json({ success: false, message: 'Tidak berwenang. Secret webhook tidak valid.' });
+    return;
+  }
+  next();
+}

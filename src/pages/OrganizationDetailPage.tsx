@@ -74,10 +74,7 @@ export const OrganizationDetailPage: React.FC = () => {
     );
   }
 
-  const orgDocs = documents.filter(d => 
-    d.organizationId === org.id && 
-    (currentUser?.role !== 'user' || d.uploaderRole === 'user' || !d.uploaderRole || d.uploadedById === currentUser.id)
-  );
+  const orgDocs = documents.filter(d => d.organizationId === org.id);
   const orgChunks = chunks.filter(c => c.organizationId === org.id);
   const orgUsers = users.filter(u => u.organizationId === org.id);
   const orgLogs = activityLogs.filter(l => l.organizationId === org.id);

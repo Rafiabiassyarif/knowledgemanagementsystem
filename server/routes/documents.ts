@@ -74,13 +74,9 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    // Role-based visibility:
-    // User biasa HANYA melihat dokumen yang di-upload oleh user atau dokumen milik sendiri.
-    // Admin melihat SEMUA dokumen (baik unggahan admin maupun unggahan user).
-    if (req.authUser && req.authUser.role === 'user') {
-      conditions.push('(d.uploader_role = "user" OR d.uploader_role IS NULL OR d.uploaded_by_id = ?)');
-      params.push(req.authUser.id);
-    }
+    // Visibilitas: user biasa melihat SEMUA dokumen di project miliknya (siapa pun
+    // pengunggahnya, termasuk admin/integrasi API). Isolasi antar-project dijaga oleh
+    // filter project di bawah. Admin melihat semua dokumen.
 
     // Project Isolation:
     // Admin dapat memantau seluruh dokumen.

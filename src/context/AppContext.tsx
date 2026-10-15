@@ -346,17 +346,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // STRICT ISOLATION: A document must strictly belong to the currently active project
     let base = documents.filter(doc => doc.organizationId && doc.organizationId.trim() === targetId.trim());
 
-    // Admin melihat SEMUA dokumen lintas project.
+    // Admin melihat SEMUA dokumen lintas project; user melihat semua dokumen
+    // di project aktifnya (siapa pun pengunggahnya).
     if (currentUser.role === 'admin') {
       base = documents;
-    }
-
-    // Role-based visibility within the project:
-    // User biasa TIDAK BISA melihat dokumen yang di-upload oleh Admin.
-    // User biasa hanya melihat dokumen unggahan user atau unggahan miliknya sendiri.
-    // Admin dapat melihat SEMUA dokumen (baik unggahan admin maupun user).
-    if (currentUser.role === 'user') {
-      base = base.filter(doc => (doc.uploaderRole === 'user' || !doc.uploaderRole || doc.uploadedById === currentUser.id));
     }
 
     return base;

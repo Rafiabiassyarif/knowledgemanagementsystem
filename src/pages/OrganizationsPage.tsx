@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { formatDateTime } from '../utils/datetime';
 import { CreateProjectModal } from '../components/common/CreateProjectModal';
 import { EditOrgModal } from '../components/common/EditOrgModal';
 import { 
@@ -377,7 +378,7 @@ export const OrganizationsPage: React.FC = () => {
 
                 {/* Created */}
                 <td className="py-3.5 px-4 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                  {typeof org.createdAt === 'string' ? org.createdAt.split('T')[0] : 'Hari ini'}
+                  {formatDateTime(org.createdAt)}
                 </td>
 
                 {/* Actions: Sticky Right Column for Full CRUD Accessibility */}
@@ -518,7 +519,7 @@ export const OrganizationsPage: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">Dibuat {typeof org.createdAt === 'string' ? org.createdAt.split('T')[0] : 'Hari ini'}</span>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">Dibuat {formatDateTime(org.createdAt)}</span>
               <div className="flex items-center gap-1.5">
                 {/* Switch Project */}
                 {currentOrganization?.id !== org.id && (

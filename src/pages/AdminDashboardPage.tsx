@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { StatCard } from '../components/common/StatCard';
 import { CreateProjectModal } from '../components/common/CreateProjectModal';
 import { API_BASE_URL, tokenStore } from '../services/api';
+import { formatDateTime } from '../utils/datetime';
 import {
   FolderKanban,
   FileText,
@@ -451,6 +452,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <th className="py-3 px-4">Knowledge Base ID</th>
                 <th className="py-3 px-4">Admin / Pemilik</th>
                 <th className="py-3 px-4 text-center">Dokumen</th>
+                <th className="py-3 px-4">Dibuat</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Aksi</th>
               </tr>
@@ -486,6 +488,9 @@ export const AdminDashboardPage: React.FC = () => {
                       <span className="inline-flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-300">
                         {org.documentsCount || 0}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">
+                      {formatDateTime(org.createdAt)}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { formatDateTime } from '../utils/datetime';
 import { StatCard } from '../components/common/StatCard';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
 import { downloadProtectedFile, API_BASE_URL } from '../services/api';
@@ -289,7 +290,7 @@ export const OrganizationDetailPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between py-1.5">
                   <span className="text-slate-500 dark:text-slate-400">Terdaftar Sejak</span>
-                  <span className="text-slate-700 dark:text-slate-300 tabular-nums">{org.createdAt}</span>
+                  <span className="text-slate-700 dark:text-slate-300 tabular-nums">{formatDateTime(org.createdAt)}</span>
                 </div>
               </div>
 

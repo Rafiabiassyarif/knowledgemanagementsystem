@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { formatDateTime } from '../utils/datetime';
 import { UploadDocumentModal } from '../components/common/UploadDocumentModal';
 import { DocumentCategory } from '../types';
 import { downloadProtectedFile, API_BASE_URL, api } from '../services/api';
@@ -43,6 +44,7 @@ export const DocumentsPage: React.FC = () => {
     refreshBackendData,
     organizations 
   } = useApp();
+  const isAdmin = currentUser?.role === 'admin';
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
@@ -420,6 +422,7 @@ export const DocumentsPage: React.FC = () => {
                 <th className="py-3.5 px-4">Kategori</th>
                 <th className="py-3.5 px-4">Project</th>
                 <th className="py-3.5 px-4 text-center">Tahun</th>
+                {isAdmin && <th className="py-3.5 px-4">Diunggah</th>}
                 <th className="py-3.5 px-4 text-right">Ukuran</th>
                 <th className="py-3.5 px-4 text-center">Penggunaan & AI</th>
                 <th className="py-3.5 px-4 text-center">Aksi</th>
@@ -514,6 +517,12 @@ export const DocumentsPage: React.FC = () => {
                         {doc.year}
                       </span>
                     </td>
+
+                    {isAdmin && (
+                      <td className="py-4 px-4 whitespace-nowrap tabular-nums text-[11px] text-slate-500 dark:text-slate-400">
+                        {formatDateTime(doc.uploadedAt || doc.uploaded_at)}
+                      </td>
+                    )}
 
                     {/* File Size & Status */}
                     <td className="py-4 px-4 text-right whitespace-nowrap">
@@ -679,7 +688,7 @@ export const DocumentsPage: React.FC = () => {
               <div className="px-4 pb-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 mt-auto">
                 <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
                   <span className="font-medium text-slate-600 dark:text-slate-300">{doc.category}</span>
-                  <span className="tabular-nums font-medium">{doc.year}</span>
+                  <span className="tabular-nums font-medium">{isAdmin ? formatDateTime(doc.uploadedAt || doc.uploaded_at) : doc.year}</span>
                 </div>
 
                 {/* Usage & View Counters */}

@@ -309,6 +309,12 @@ async function createTables() {
       INDEX idx_apikey_user (user_id)
     )
   `);
+  // Salinan terenkripsi agar kunci bisa disalin ulang (kunci lama: NULL).
+  const [akCols] = await p.query<any[]>("SHOW COLUMNS FROM api_keys LIKE 'key_enc'");
+  if (akCols.length === 0) {
+    await p.query('ALTER TABLE api_keys ADD COLUMN key_enc TEXT NULL AFTER key_prefix');
+    console.log('[DB] Kolom key_enc ditambahkan ke tabel api_keys.');
+  }
 
   // 7. Sanitasi URL berkas ke Kroombox Edge CDN dan penyesuaian tipe repositori foto
   try {

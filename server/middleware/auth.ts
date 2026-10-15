@@ -62,6 +62,34 @@ export function generateApiKey(): string {
   return 'kms_ak_' + crypto.randomBytes(24).toString('hex');
 }
 
+// Kunci enkripsi untuk menyimpan salinan kunci API agar bisa disalin ulang dari
+// halaman admin. Pakai API_KEY_ENC_SECRET bila ada; bila tidak, diturunkan dari
+// JWT_SECRET (domain terpisah). Verifikasi tetap memakai hash, bukan salinan ini.
+const KEY_ENC = crypto.createHash('sha256')
+  .update(`kms-apikey-enc:${(process.env.API_KEY_ENC_SECRET || '').trim() || JWT_SECRET}`)
+  .digest();
+
+/** Enkripsi kunci API (AES-256-GCM) -> "iv.tag.data" base64url. */
+export function encryptApiKey(raw: string): string {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', KEY_ENC, iv);
+  const data = Buffer.concat([c.update(raw, 'utf8'), c.final()]);
+  return [iv, c.getAuthTag(), data].map(b => b.toString('base64url')).join('.');
+}
+
+/** Dekripsi salinan kunci API; null bila kosong/rusak. */
+export function decryptApiKey(enc?: string | null): string | null {
+  if (!enc) return null;
+  try {
+    const [iv, tag, data] = enc.split('.').map(s => Buffer.from(s, 'base64url'));
+    const d = crypto.createDecipheriv('aes-256-gcm', KEY_ENC, iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(data), d.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Cari pengguna dari API key per-pengguna, lalu catat pemakaian terakhirnya.
  * Mengembalikan null bila kunci tidak dikenal / sudah dicabut / akunnya non-aktif.

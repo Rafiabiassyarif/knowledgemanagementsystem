@@ -22,6 +22,7 @@ interface ApiKeyRow {
   createdAt: string;
   userName?: string | null;
   userEmail?: string | null;
+  copyable?: boolean;
 }
 
 function authHeaders() {
@@ -32,8 +33,12 @@ export const ApiKeysPage: React.FC = () => {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [label, setLabel] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [userEmails, setUserEmails] = useState<string[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
+  const [newKeyOwner, setNewKeyOwner] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -53,6 +58,11 @@ export const ApiKeysPage: React.FC = () => {
 
   useEffect(() => {
     fetchKeys();
+    // Saran email pemilik (endpoint khusus admin; gagal = tanpa saran).
+    fetch(`${API_BASE_URL}/users`, { headers: authHeaders() })
+      .then(r => r.json())
+      .then(d => setUserEmails((d.users || []).map((u: any) => u.email).filter(Boolean)))
+      .catch(() => {});
   }, [fetchKeys]);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -63,7 +73,7 @@ export const ApiKeysPage: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/auth/api-keys`, {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: label.trim() || 'default' })
+        body: JSON.stringify({ label: label.trim() || undefined, userEmail: ownerEmail.trim() || undefined })
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -71,7 +81,9 @@ export const ApiKeysPage: React.FC = () => {
         return;
       }
       setNewKey(data.apiKey);
+      setNewKeyOwner(data.key?.user?.email || null);
       setLabel('');
+      setOwnerEmail('');
       fetchKeys();
     } catch (err: any) {
       setError(err?.message || 'Terjadi kesalahan jaringan.');
@@ -103,6 +115,24 @@ export const ApiKeysPage: React.FC = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  // Salin kunci lengkap dari daftar (diambil dari server saat diklik).
+  const copyKey = async (id: string) => {
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/api-keys/${id}/reveal`, { headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || 'Gagal mengambil kunci.');
+        return;
+      }
+      await navigator.clipboard.writeText(data.apiKey);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err: any) {
+      setError(err?.message || 'Gagal menyalin kunci.');
+    }
   };
 
   const fmtDate = (d: string | null) => {
@@ -140,7 +170,7 @@ export const ApiKeysPage: React.FC = () => {
           Kirim header <code className="px-1 py-0.5 rounded bg-white/70 dark:bg-slate-900/60 font-mono">X-API-Key: kms_ak_...</code>{' '}
           (atau <code className="px-1 py-0.5 rounded bg-white/70 dark:bg-slate-900/60 font-mono">Authorization: Bearer kms_ak_...</code>) pada
           setiap request ke <code className="px-1 py-0.5 rounded bg-white/70 dark:bg-slate-900/60 font-mono">https://ragkms.aiones.app/api/...</code>.
-          Kunci yang dibuat di sini hanya memiliki akses sebesar akun admin yang membuatnya — bisa dicabut kapan saja tanpa memengaruhi kunci lain.
+          Kunci memiliki akses sebesar akun pemiliknya (email yang dipilih saat membuat), dan semua project/dokumen yang dibuat lewat kunci tercatat atas nama pemilik itu. Bisa dicabut kapan saja tanpa memengaruhi kunci lain.
         </p>
       </div>
 
@@ -155,7 +185,7 @@ export const ApiKeysPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 space-y-3">
             <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>Kunci berhasil dibuat — salin sekarang, kunci ini hanya ditampilkan SEKALI.</span>
+              <span>Kunci berhasil dibuat{newKeyOwner ? ` untuk ${newKeyOwner}` : ''}. Kunci bisa disalin lagi kapan saja dari daftar Kunci Aktif.</span>
             </div>
             <div className="flex items-center gap-2">
               <code className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 text-xs font-mono break-all text-slate-800 dark:text-slate-200">
@@ -179,16 +209,32 @@ export const ApiKeysPage: React.FC = () => {
             </button>
           </div>
         ) : (
-          <form onSubmit={handleCreate} className="flex items-end gap-3">
+          <form onSubmit={handleCreate} className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex-1">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Label (untuk memudahkan Anda mengenali kunci ini)
+                Email pemilik kunci
+              </label>
+              <input
+                type="email"
+                list="api-key-owner-emails"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                placeholder="kosongkan = akun Anda sendiri"
+                className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-600"
+              />
+              <datalist id="api-key-owner-emails">
+                {userEmails.map(em => <option key={em} value={em} />)}
+              </datalist>
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Nama / label kunci
               </label>
               <input
                 type="text"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="mis. Integrasi Teman / Partner XYZ"
+                placeholder="kosongkan = nama pemilik"
                 className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-600"
               />
             </div>
@@ -243,9 +289,25 @@ export const ApiKeysPage: React.FC = () => {
                   <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400 dark:text-slate-500">
                     <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Dibuat: {fmtDate(k.createdAt)}</span>
                     <span>Terakhir dipakai: {fmtDate(k.lastUsedAt)}</span>
-                    {k.userName && <span>Pemilik: {k.userName}</span>}
                   </div>
+                  {(k.userName || k.userEmail) && (
+                    <div className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                      Pemilik: <span className="font-medium">{k.userName}</span>
+                      {k.userEmail && <span className="ml-1 font-mono text-slate-400">({k.userEmail})</span>}
+                    </div>
+                  )}
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => copyKey(k.id)}
+                  disabled={!k.copyable}
+                  title={k.copyable ? 'Salin kunci lengkap' : 'Kunci lama: dibuat sebelum fitur salin, tidak bisa ditampilkan lagi'}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {copiedId === k.id ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedId === k.id ? 'Tersalin' : 'Salin'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleRevoke(k.id)}
@@ -255,6 +317,7 @@ export const ApiKeysPage: React.FC = () => {
                   {revokingId === k.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                   <span>Cabut</span>
                 </button>
+                </div>
               </div>
             ))}
           </div>

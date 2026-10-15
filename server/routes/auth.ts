@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { isMailConfigured, sendMail, resetPasswordEmail, resetPasswordOtpEmail, mailSender } from '../services/mailer';
-import { generateToken, requireAuth, hashApiKey, generateApiKey } from '../middleware/auth';
+import { generateToken, requireAuth, hashApiKey, generateApiKey, encryptApiKey, decryptApiKey } from '../middleware/auth';
 
 const router = Router();
 
@@ -641,36 +641,67 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
 // API KEY PER-PENGGUNA (akses API tanpa sandi, bisa dicabut satu per satu)
 // ---------------------------------------------------------------------------
 
-// Buat kunci API. Pengguna biasa untuk dirinya sendiri; admin boleh menyebut userId.
+// Buat kunci API. Pengguna biasa untuk dirinya sendiri; admin boleh menyebut
+// pemilik lewat userEmail (atau userId).
 router.post('/api-keys', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const actor = req.authUser!;
-    const { label, userId } = req.body || {};
-    const targetId = (userId && actor.role === 'admin') ? String(userId) : actor.id;
-
+    const { label, userId, userEmail } = req.body || {};
     const p = getPool();
-    const [urows] = await p.query<any[]>('SELECT id, name, email, role FROM users WHERE id = ?', [targetId]);
+    const isAdmin = actor.role === 'admin';
+    const email = isAdmin && userEmail ? String(userEmail).trim().toLowerCase() : '';
+    const [urows] = await p.query<any[]>(
+      email ? 'SELECT id, name, email, role FROM users WHERE LOWER(email) = ?' : 'SELECT id, name, email, role FROM users WHERE id = ?',
+      [email || ((userId && isAdmin) ? String(userId) : actor.id)]
+    );
     if (urows.length === 0) {
-      res.status(404).json({ success: false, message: 'Pengguna tidak ditemukan.' });
+      res.status(404).json({ success: false, message: email ? `Pengguna dengan email "${email}" tidak ditemukan.` : 'Pengguna tidak ditemukan.' });
       return;
     }
+    const owner = urows[0];
 
     const raw = generateApiKey();
     const id = `key-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    const keyLabel = String(label || owner.name || 'default').slice(0, 120);
     await p.query(
-      `INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix) VALUES (?, ?, ?, ?, ?)`,
-      [id, targetId, String(label || 'default').slice(0, 120), hashApiKey(raw), raw.slice(0, 14)]
+      `INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, key_enc) VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, owner.id, keyLabel, hashApiKey(raw), raw.slice(0, 14), encryptApiKey(raw)]
     );
 
     res.status(201).json({
       success: true,
-      message: 'Kunci API dibuat. Simpan sekarang — kunci ini hanya ditampilkan sekali.',
+      message: 'Kunci API dibuat. Kunci bisa disalin lagi kapan saja dari daftar kunci.',
       apiKey: raw,
-      key: { id, label: String(label || 'default'), prefix: raw.slice(0, 14), userId: targetId, user: urows[0] }
+      key: { id, label: keyLabel, prefix: raw.slice(0, 14), userId: owner.id, user: owner }
     });
   } catch (err: any) {
     console.error('[CREATE API KEY ERROR]', err);
     res.status(500).json({ success: false, message: 'Gagal membuat kunci API.' });
+  }
+});
+
+// Ambil kunci lengkap untuk disalin (pemilik atau admin). Hanya kunci aktif yang
+// punya salinan terenkripsi; kunci lama (sebelum fitur ini) tidak bisa dipulihkan.
+router.get('/api-keys/:id/reveal', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const actor = req.authUser!;
+    const [rows] = await getPool().query<any[]>(
+      'SELECT user_id, key_enc, revoked_at FROM api_keys WHERE id = ?', [req.params.id]
+    );
+    const row = rows[0];
+    if (!row || (row.user_id !== actor.id && actor.role !== 'admin')) {
+      res.status(404).json({ success: false, message: 'Kunci API tidak ditemukan.' });
+      return;
+    }
+    const raw = row.revoked_at ? null : decryptApiKey(row.key_enc);
+    if (!raw) {
+      res.status(410).json({ success: false, message: 'Kunci ini dibuat sebelum fitur salin tersedia (atau sudah dicabut), jadi tidak bisa ditampilkan lagi.' });
+      return;
+    }
+    res.json({ success: true, apiKey: raw });
+  } catch (err: any) {
+    console.error('[REVEAL API KEY ERROR]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengambil kunci API.' });
   }
 });
 
@@ -682,7 +713,7 @@ router.get('/api-keys', requireAuth, async (req: Request, res: Response): Promis
     const where = actor.role === 'admin' ? '' : 'WHERE user_id = ?';
     const params = actor.role === 'admin' ? [] : [actor.id];
     const [rows] = await p.query<any[]>(
-      `SELECT id, user_id, label, key_prefix, last_used_at, revoked_at, created_at
+      `SELECT id, user_id, label, key_prefix, key_enc IS NOT NULL AS copyable, last_used_at, revoked_at, created_at
          FROM api_keys
          ${where}
         ORDER BY created_at DESC`,
@@ -705,7 +736,7 @@ router.get('/api-keys', requireAuth, async (req: Request, res: Response): Promis
       keys: rows.map(r => ({
         id: r.id, userId: r.user_id,
         userName: umap[r.user_id]?.name ?? null, userEmail: umap[r.user_id]?.email ?? null,
-        label: r.label, prefix: r.key_prefix,
+        label: r.label, prefix: r.key_prefix, copyable: !!r.copyable && !r.revoked_at,
         lastUsedAt: r.last_used_at, revokedAt: r.revoked_at, createdAt: r.created_at,
         active: !r.revoked_at
       }))

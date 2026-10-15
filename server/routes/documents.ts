@@ -1309,9 +1309,27 @@ router.post('/sync-rag', requireAuth, async (req: Request, res: Response): Promi
 
 // 12. Manual trigger: Rekonsiliasi sinkronisasi penghapusan dokumen dari https://rag.aiones.app/
 // (dipisah dari /sync-rag agar re-index tidak tertukar dengan rekonsiliasi penghapusan)
+// PENGAMAN: endpoint ini MENGHAPUS berkas dari CDN & database. Hanya admin (semua
+// project) atau pengguna yang berhak atas project tersebut yang boleh menjalankannya.
 router.post('/reconcile-rag', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { organizationId } = req.body;
+    const actor = req.authUser!;
+    let { organizationId } = req.body as { organizationId?: string };
+
+    // Non-admin hanya boleh merekonsiliasi project miliknya sendiri.
+    if (actor.role !== 'admin') {
+      if (!actor.organizationId) {
+        res.status(403).json({ success: false, message: 'Anda tidak terhubung ke project mana pun.' });
+        return;
+      }
+      if (organizationId && organizationId !== 'all' && organizationId !== actor.organizationId) {
+        res.status(403).json({ success: false, message: 'Anda tidak berwenang merekonsiliasi project milik orang lain.' });
+        return;
+      }
+      // Paksa ke project miliknya (cegah "all" menyapu seluruh tenant).
+      organizationId = actor.organizationId;
+    }
+
     const result = await reconcileRagDeletions(organizationId, true, true);
     res.json({
       success: true,

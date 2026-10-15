@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { ensureProjectRagKey, revokeProjectRagKey } from '../services/ragKeys';
 import { deleteDocumentFromRag, indexDocumentToRag } from '../services/rag';
 import { deleteFromKroomboxCDN } from '../services/cdn';
+import { AUTO_IMPORT_OWNER } from '../services/ragSync';
 
 const router = Router();
 
@@ -220,6 +221,52 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     const effectiveCreatorId = req.authUser?.id || creatorId || null;
     const effectiveAdminName = adminName || req.authUser?.name || 'Owner Project';
     const effectiveEmail = email || req.authUser?.email || null;
+
+    // KB yang sama tidak boleh dipakai dua project. Bila KB sudah tercatat:
+    //  - milik project hasil auto-import (dibuat langsung di rag.aiones.app) ->
+    //    project itu DIKLAIM oleh pembuat ini (pemilik & email diperbarui),
+    //    bukan diduplikasi;
+    //  - milik pengguna lain -> ditolak agar tidak terjadi akses lintas-tenant.
+    const [kbOwner] = await p.query<any[]>(
+      'SELECT id, admin_name FROM organizations WHERE knowledge_base = ? LIMIT 1',
+      [finalKb]
+    );
+    if (kbOwner.length > 0) {
+      if (kbOwner[0].admin_name !== AUTO_IMPORT_OWNER) {
+        res.status(409).json({ success: false, message: `Knowledge Base "${finalKb}" sudah dipakai project lain.` });
+        return;
+      }
+      const claimedId = kbOwner[0].id;
+      await p.query(
+        `UPDATE organizations SET name = ?, code = ?, type = ?, sector = ?, province = ?, city = ?, address = ?,
+           phone = ?, email = ?, website = ?, description = ?, admin_name = ?, created_by = ?, status = 'active'
+         WHERE id = ?`,
+        [
+          name.trim(), code.trim().toUpperCase(), type, sector || null, province || null, city || null,
+          address || null, phone || null, effectiveEmail, website || null, description || null,
+          effectiveAdminName, effectiveCreatorId, claimedId
+        ]
+      );
+      if (effectiveCreatorId) {
+        await p.query('UPDATE users SET organization_id = ? WHERE id = ?', [claimedId, effectiveCreatorId]);
+      }
+      await p.query(
+        `INSERT INTO activity_logs (id, organization_id, organization_name, actor_name, actor_role, action, target, type)
+         VALUES (?, ?, ?, ?, ?, 'Mengklaim Project Auto-Import RAG', ?, 'organization')`,
+        [`act-${Date.now()}`, claimedId, name.trim(), effectiveAdminName, req.authUser?.role || 'user', name.trim()]
+      );
+      console.log(`[CREATE ORG] KB "${finalKb}" sudah ada dari auto-import -> project ${claimedId} diklaim oleh ${effectiveEmail || effectiveAdminName}.`);
+      res.status(201).json({
+        success: true,
+        message: 'Proyek berhasil dibuat (Knowledge Base yang sudah ada di RAG dihubungkan ke akun Anda).',
+        organization: {
+          id: claimedId, name: name.trim(), code: code.trim().toUpperCase(), knowledgeBase: finalKb, type,
+          sector, province, city, address, phone, email: effectiveEmail, website, description,
+          adminName: effectiveAdminName, createdBy: effectiveCreatorId, status: 'active'
+        }
+      });
+      return;
+    }
 
     await p.query(`
       INSERT INTO organizations (id, name, code, knowledge_base, type, sector, province, city, address, phone, email, website, description, admin_name, created_by, status)

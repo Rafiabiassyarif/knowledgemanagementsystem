@@ -284,6 +284,9 @@ export interface AutoImportResult {
   error?: string;
 }
 
+/** Penanda pemilik project hasil auto-import (KB dibuat langsung di rag.aiones.app). */
+export const AUTO_IMPORT_OWNER = 'Sistem (Auto-Import RAG)';
+
 // Throttle terpisah khusus auto-import KB (tidak berbagi batas waktu dengan reconcileRagDeletions)
 let lastKbImportTimestamp = 0;
 const MIN_KB_IMPORT_INTERVAL_MS = 45 * 1000;
@@ -350,10 +353,11 @@ export async function autoImportNewRagKnowledgeBases(force: boolean = false): Pr
 
         await p.query(
           `INSERT INTO organizations (id, name, code, knowledge_base, type, description, admin_name, status)
-           VALUES (?, ?, ?, ?, 'Lainnya', ?, 'Sistem (Auto-Import RAG)', 'active')`,
+           VALUES (?, ?, ?, ?, 'Lainnya', ?, ?, 'active')`,
           [
             orgId, name, code, kb.knowledgeBaseId,
-            `Project dibuat otomatis oleh sistem karena Knowledge Base "${kb.knowledgeBaseId}" terdeteksi sudah ada di rag.aiones.app (${kb.documents} dokumen, ${kb.chunks} chunk) namun belum terdaftar di KMS. Tinjau & lengkapi detail project ini.`
+            `Project dibuat otomatis oleh sistem karena Knowledge Base "${kb.knowledgeBaseId}" terdeteksi sudah ada di rag.aiones.app (${kb.documents} dokumen, ${kb.chunks} chunk) namun belum terdaftar di KMS. Tinjau & lengkapi detail project ini.`,
+            AUTO_IMPORT_OWNER
           ]
         );
 
